@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const runCommand = promisify(execFile);
-import { Configuration } from "./Configuration";
+import { Configuration } from "../config/Configuration";
 
 class BotAvatarUpdater {
   private readonly rest: REST;
@@ -39,7 +39,7 @@ class BotAvatarUpdater {
     await runCommand("swift", [
       "-module-cache-path",
       ".tmp/swift-cache",
-      fileURLToPath(new URL("../scripts/pad-avatar.swift", import.meta.url)),
+      fileURLToPath(new URL("../../scripts/pad-avatar.swift", import.meta.url)),
       source,
       output,
     ]);

@@ -1,6 +1,6 @@
 import { ApplicationCommandType, REST, Routes } from "discord.js";
-import { AutoroleCommands } from "./AutoroleCommands";
-import { Configuration } from "./Configuration";
+import { AutoroleCommands } from "../bot/AutoroleCommands";
+import { Configuration } from "../config/Configuration";
 
 export class CommandCleaner {
   constructor(

@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { REST, Routes } from "discord.js";
-import { CommandCleaner } from "../src/clean-commands";
-import { Configuration } from "../src/Configuration";
+import { CommandCleaner } from "../src/cli/clean-commands";
+import { Configuration } from "../src/config/Configuration";
 
 const applicationId = "100000000000000001";
 const guildId = "100000000000000002";

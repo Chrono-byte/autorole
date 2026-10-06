@@ -10,7 +10,7 @@ bun run build:binary
 mkdir -p .tmp/deploy
 # Export only the runtime configuration, never the rest of the local environment.
 bun -e '
-import { Configuration } from "./src/Configuration";
+import { Configuration } from "./src/config/Configuration";
 const config = new Configuration();
 const values = {
   DISCORD_TOKEN: config.token,

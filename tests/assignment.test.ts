@@ -7,10 +7,10 @@ import {
   Routes,
   type ApplicationCommandPermissions,
 } from "discord.js";
-import { Configuration } from "../src/Configuration";
-import { IntegrationSettings } from "../src/IntegrationSettings";
-import { RoleService } from "../src/RoleService";
-import { AutoroleCommands } from "../src/AutoroleCommands";
+import { Configuration } from "../src/config/Configuration";
+import { IntegrationSettings } from "../src/config/IntegrationSettings";
+import { RoleService } from "../src/bot/RoleService";
+import { AutoroleCommands } from "../src/bot/AutoroleCommands";
 
 const ids = {
   app: "100000000000000001",

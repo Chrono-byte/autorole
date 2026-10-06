@@ -1,5 +1,5 @@
-import { AutoroleBot } from "./src/AutoroleBot";
-import { Configuration } from "./src/Configuration";
+import { AutoroleBot } from "./bot/AutoroleBot";
+import { Configuration } from "./config/Configuration";
 const bot = new AutoroleBot(new Configuration());
 process.once("SIGINT", () => {
   void bot.stop().then(() => process.exit(0));

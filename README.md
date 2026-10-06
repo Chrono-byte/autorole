@@ -70,3 +70,7 @@ Run `bun run deploy` to check the project, compile one standalone Linux x86-64 e
 The executable lives at `~/.local/share/autorole/autorole`. Discord credentials are stored separately at `~/.config/autorole/env` with mode `600`. The deployment transfers only the three Discord configuration variables and checks that the bot token is absent from the executable.
 
 The `autorole.service` user unit starts at boot and restarts on failure. User lingering is already enabled on hermes. View status with `ssh chrono@hermes systemctl --user status autorole.service` and logs with `ssh chrono@hermes journalctl --user -u autorole.service -n 50 --no-pager`. Restart it with `ssh chrono@hermes systemctl --user restart autorole.service`.
+
+## Source layout
+
+`src/index.ts` starts the bot. `src/bot/` contains the bot lifecycle, command handling and role assignment. `src/config/` contains environment validation and Discord integration settings. `src/cli/` contains command registration, command cleanup and avatar maintenance. Deployment and image-processing helpers remain in `scripts/`.

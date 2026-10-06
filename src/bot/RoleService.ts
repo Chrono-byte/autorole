@@ -1,5 +1,5 @@
 import { PermissionFlagsBits, type Guild, type GuildMember, type Role } from "discord.js";
-import { IntegrationSettings } from "./IntegrationSettings";
+import { IntegrationSettings } from "../config/IntegrationSettings";
 export class RoleService {
   constructor(private readonly settings: IntegrationSettings) {}
 

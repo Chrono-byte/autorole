@@ -1,6 +1,6 @@
 import { Client, Events, GatewayIntentBits } from "discord.js";
-import { Configuration } from "./Configuration";
-import { IntegrationSettings } from "./IntegrationSettings";
+import { Configuration } from "../config/Configuration";
+import { IntegrationSettings } from "../config/IntegrationSettings";
 import { RoleService } from "./RoleService";
 import { AutoroleCommands } from "./AutoroleCommands";
 

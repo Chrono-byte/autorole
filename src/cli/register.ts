@@ -1,6 +1,6 @@
 import { REST, Routes } from "discord.js";
-import { Configuration } from "./Configuration";
-import { AutoroleCommands } from "./AutoroleCommands";
+import { Configuration } from "../config/Configuration";
+import { AutoroleCommands } from "../bot/AutoroleCommands";
 
 class CommandRegistrar {
   constructor(private readonly config: Configuration) {}
