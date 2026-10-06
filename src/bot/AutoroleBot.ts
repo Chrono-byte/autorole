@@ -1,4 +1,4 @@
-import { Client, DiscordAPIError, Events, GatewayIntentBits } from "discord.js";
+import { ActivityType, Client, DiscordAPIError, Events, GatewayIntentBits } from "discord.js";
 import { Configuration } from "../config/Configuration";
 import { IntegrationSettings } from "../config/IntegrationSettings";
 import { RoleService } from "./RoleService";
@@ -7,7 +7,17 @@ import { AutoroleCommands } from "./AutoroleCommands";
 import { AssignmentQueue } from "./AssignmentQueue";
 import { notifyReady } from "./notifyReady";
 
+const overwatchStatuses = [
+  "Escorting the payload",
+  "Contesting the point",
+  "Waiting for the team to group up",
+  "Heroes never die!",
+  "Nerf this!",
+  "The world could always use more heroes",
+] satisfies [string, ...string[]];
+
 export class AutoroleBot {
+  private presenceTimer: ReturnType<typeof setInterval> | undefined;
   private readonly assignments: AssignmentQueue;
   private readonly client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
@@ -23,6 +33,23 @@ export class AutoroleBot {
       );
     });
     this.client.once(Events.ClientReady, (client) => {
+      let statusIndex = 0;
+      const updatePresence = () => {
+        client.user.setPresence({
+          activities: [
+            {
+              name: "Overwatch",
+              type: ActivityType.Custom,
+              state: overwatchStatuses[statusIndex] ?? overwatchStatuses[0],
+            },
+          ],
+          status: "online",
+        });
+        statusIndex = (statusIndex + 1) % overwatchStatuses.length;
+      };
+      updatePresence();
+      this.presenceTimer = setInterval(updatePresence, 60_000);
+      this.presenceTimer.unref();
       process.stdout.write(`Connected as ${client.user.tag}\n`);
       void notifyReady().catch((error) => {
         this.report(error);
@@ -54,6 +81,7 @@ export class AutoroleBot {
   }
 
   stop() {
+    clearInterval(this.presenceTimer);
     this.assignments.stop();
     return this.client.destroy();
   }
