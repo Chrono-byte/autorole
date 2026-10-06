@@ -44,8 +44,16 @@ Command cleanup preserves `/autorole`, `/autorole-target`, and context-menu comm
 
 ## Deploy
 
+Forgejo Actions deploys on pushes to `main`, or manually from the repository's Actions page. The workflow uses the `ci` runner to install locked dependencies, run checks, compile the executable, and deploy to hermes over SSH. Deployments run one at a time and wait until the bot connects to Discord.
+
+Repository secrets are `DEPLOY_HOST`, `DEPLOY_SSH_KEY`, and `DEPLOY_KNOWN_HOSTS`. The dedicated deploy key and pinned host key are configured. Discord credentials stay on hermes at `~/.config/autorole/env`; Actions does not read or replace them. The runner must be able to reach hermes over Tailscale.
+
+For a local deployment that also updates the server's Discord credentials:
+
 ```sh
 bun run deploy user@host
 ```
 
 Checks the project, compiles a standalone Linux executable, and deploys it over SSH as a systemd user service. The destination needs `systemd-notify` and a working user systemd session.
+
+`bun run deploy:artifact user@host` deploys an existing `dist/autorole` without replacing credentials. This is the command the workflow uses.

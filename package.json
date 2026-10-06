@@ -16,7 +16,8 @@
     "avatar": "bun run src/cli/set-avatar.ts",
     "lint:fix": "oxlint --fix --deny-warnings .",
     "build:binary": "bun build --compile --minify --keep-names --target=bun-linux-x64-baseline --env=disable --no-compile-autoload-dotenv --no-compile-autoload-bunfig src/index.ts --outfile dist/autorole",
-    "deploy": "sh scripts/deploy.sh"
+    "deploy": "sh scripts/deploy.sh",
+    "deploy:artifact": "sh scripts/deploy-artifact.sh"
   },
   "dependencies": {
     "discord.js": "^14.27.0"

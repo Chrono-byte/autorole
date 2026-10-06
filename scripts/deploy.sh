@@ -34,18 +34,10 @@ ssh -o BatchMode=yes -o ConnectTimeout=10 "$deploy_host" '
   mkdir -p .local/share/autorole .config/autorole .config/systemd/user
   chmod 700 .config/autorole
 '
-scp -o BatchMode=yes -o ConnectTimeout=10 dist/autorole "$deploy_host:.local/share/autorole/autorole.new"
 scp -o BatchMode=yes -o ConnectTimeout=10 .tmp/deploy/runtime.env "$deploy_host:.config/autorole/env.new"
-scp -o BatchMode=yes -o ConnectTimeout=10 deploy/autorole.service "$deploy_host:.config/systemd/user/autorole.service.new"
 ssh -o BatchMode=yes -o ConnectTimeout=10 "$deploy_host" '
   set -eu
-  chmod 700 .local/share/autorole/autorole.new
-  chmod 600 .config/autorole/env.new .config/systemd/user/autorole.service.new
-  mv .local/share/autorole/autorole.new .local/share/autorole/autorole
+  chmod 600 .config/autorole/env.new
   mv .config/autorole/env.new .config/autorole/env
-  mv .config/systemd/user/autorole.service.new .config/systemd/user/autorole.service
-  systemctl --user daemon-reload
-  systemctl --user enable autorole.service
-  systemctl --user restart autorole.service
-  systemctl --user is-active autorole.service
 '
+sh scripts/deploy-artifact.sh "$deploy_host"
