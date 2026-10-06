@@ -1,0 +1,14 @@
+[
+  {
+    "label": "Check project",
+    "command": "bun run check"
+  },
+  {
+    "label": "Lint project",
+    "command": "bun run lint"
+  },
+  {
+    "label": "Format project",
+    "command": "bun run format"
+  }
+]

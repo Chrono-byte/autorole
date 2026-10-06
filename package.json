@@ -1,0 +1,30 @@
+{
+  "name": "autorole",
+  "private": true,
+  "type": "module",
+  "module": "index.ts",
+  "scripts": {
+    "start": "bun run index.ts",
+    "register": "bun run src/register.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint --deny-warnings .",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "test": "bun test",
+    "check": "bun run typecheck && bun run lint && bun run format:check && bun test",
+    "clean-commands": "bun run src/clean-commands.ts",
+    "avatar": "bun run src/set-avatar.ts",
+    "lint:fix": "oxlint --fix --deny-warnings ."
+  },
+  "dependencies": {
+    "discord.js": "^14.27.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "oxfmt": "^0.72.0",
+    "oxlint": "^1.87.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
