@@ -1,76 +1,56 @@
 # Autorole
 
-Class-based TypeScript Discord bot using discord.js and Bun. Configure the role directly in **Server Settings > Integrations**. The bot reads the explicitly allowed role on a dedicated `/autorole-target` command and assigns it to new human members after membership screening.
+A Discord bot built with Bun, TypeScript, and discord.js. Assigns a selected role to new human members after membership screening.
 
-## Install
+## Setup
 
 ```sh
-bun add discord.js
-bun add -d typescript @types/bun oxlint oxfmt
+bun install
 cp .env.example .env
 ```
 
-Create a bot at https://discord.com/developers/applications. Fill `.env` with its token and application ID. Enable **Server Members Intent** on the Bot page. Under Installation, enable Guild Install with `bot` and `applications.commands` scopes and **Manage Roles** permission. Install the bot and move its highest role above the intended autorole.
+Create a bot in the [Discord Developer Portal](https://discord.com/developers/applications) and fill in `DISCORD_TOKEN` and `DISCORD_APPLICATION_ID` in `.env`.
+
+Enable **Server Members Intent**, install with the `bot` and `applications.commands` scopes and **Manage Roles** permission, then move the bot's highest role above the role it will assign.
 
 ```sh
 bun run register
 bun run start
 ```
 
-Optional `DISCORD_GUILD_ID` registers commands only in one test server. Otherwise commands register globally. Registration upserts these two commands and preserves unrelated commands. Keep the same registration scope when updating; switching from guild to global requires removing old guild commands to avoid duplicates.
+Set `DISCORD_GUILD_ID` to register in one server; otherwise commands register globally. Keep the same scope when updating to avoid duplicate commands.
 
-## Select the role in Integrations
+## Choose a role
 
-1. Open **Server Settings > Integrations > your bot**.
-2. Select the **/autorole-target** command itself, rather than the app-wide permissions at the top.
-3. Add the role you want new members to receive under **Roles & Members** and enable its green checkmark.
-4. Keep exactly one regular role allowed on this command and save. The command should have its own permissions, shown as **Not Synced**.
-5. Run `/autorole status` to verify the selected role and bot permissions.
+1. Open **Server Settings > Integrations > your bot > /autorole-target**.
+2. Under **Roles & Members**, allow exactly one regular role and save. The command should show **Not Synced**.
+3. Run `/autorole status` to check the configuration. This requires Manage Server and Manage Roles.
 
-To change the role, remove or deny the old entry and allow the new one. To disable assignment, remove or deny all regular role entries on `/autorole-target`. Existing member roles remain.
+To change roles, remove the old selection and allow the new one. To disable assignment, remove or deny all role selections. Changes apply without restarting.
 
-This uses Discord's command-permission selectors as configuration. Discord still displays them as access permissions, and the allowed role can invoke `/autorole-target`. That command only displays instructions; it never modifies settings or assigns roles. App-wide permissions, user entries, channel entries, denied roles and @everyone do not select an autorole. Multiple allowed roles cause assignment to stop with an error instead of choosing one arbitrarily.
+Use the command's own permissions; app-wide permissions do not select a role. Running `/autorole-target` only shows instructions. Bots are skipped, and existing members or joins while the bot is offline are not backfilled.
 
-Discord stores the settings. The bot fetches explicit permissions before each assignment, so saved changes apply to the next eligible member without restarting. It fails without assigning a role if the permissions request fails. The bot needs Manage Roles and a higher role than the target. Configuration through Discord follows Discord's own permission checks. `/autorole status` requires Manage Server and Manage Roles.
-
-Bots are skipped. Membership screening must finish before role assignment. Existing members and joins while the bot is offline are not backfilled. Deleted roles and missing permissions produce structured errors in stderr. The previous SQLite settings and `/autorole set` or `/autorole disable` commands are no longer used; select your role in Integrations after updating.
-
-## Verify
+## Maintenance
 
 ```sh
-bun run format
-bun run check
+bun run check                         # Types, lint, formatting, and tests
+bun run format                        # Apply lint fixes and formatting
+bun run clean-commands --guild        # Remove obsolete slash commands in DISCORD_GUILD_ID
+bun run clean-commands --global       # Remove obsolete global slash commands
+bun run avatar ./athena.png           # Update the bot avatar from a PNG; requires macOS
 ```
 
-Tests cover permission selection and environment validation, plus the path from command-permission responses through real discord.js managers to the role-assignment request. Only Discord network responses are mocked. Assignment tests cover changing and disabling selections, global and guild commands, screening, skipped bots and existing roles, role hierarchy, missing permissions, and API failures. For live verification, configure a target in Integrations, join with a human test account, complete screening and confirm assignment. Switch roles in Integrations and verify a second account receives the new role. Remove allowed role entries and confirm another join receives no role. Requires a real bot token and test server.
+Command cleanup preserves `/autorole`, `/autorole-target`, and context-menu commands.
 
-## Remove obsolete slash commands
+## Deploy
 
 ```sh
-bun run clean-commands --guild
-bun run clean-commands --global
+bun run deploy
 ```
 
-This deletes slash commands belonging to this application that are not listed in `AutoroleCommands.definitions`. It preserves `/autorole`, `/autorole-target`, their permission selections, and user/message context-menu commands. Choose exactly one scope. `--guild` cleans only the server in `DISCORD_GUILD_ID` and requires that setting. `--global` cleans only global commands, even when a guild ID is configured. It does not register missing commands. Run `bun run register` separately when needed.
+Checks the project, compiles a standalone Linux executable, and deploys to `chrono@hermes` as a systemd user service. Credentials are stored separately in `~/.config/autorole/env`.
 
-## Bot avatar
-
-On macOS, run `bun run avatar` to apply the original blue Athena image using discord.js and the bot token in `.env`. The script uses Swift and macOS Core Graphics to center the image on a larger square canvas whose color matches the original border, then feather its outer edges into the padding. The central logo and lettering remain unchanged, with room for Discord’s circular crop. It saves the original at `assets/athena-source.png` and the padded version at `assets/athena-avatar.png`. To use a downloaded PNG, run `bun run avatar ./athena.png`. The script reads the bot profile after updating it to verify the avatar.
-
-## Formatting and linting
-
-Oxfmt and Oxlint are installed as development dependencies. Project rules live in `.oxfmtrc.json` and `.oxlintrc.json`. Run `bun run format` to apply safe lint fixes and format files, `bun run lint` to lint, or `bun run lint:fix` to apply safe lint fixes. `bun run check` checks types, lint, formatting and tests. Temporary files and image assets are excluded.
-
-Project-local Zed settings run Oxlint fixes before Oxfmt on save for TypeScript and JavaScript, and use Oxfmt for JSON, JSONC and Markdown. The Stylistic class-member spacing rule inserts blank lines around methods while keeping fields grouped together. Zed tasks provide project check, lint and formatting commands. For inline lint diagnostics, install the Oxc extension from Zed’s extension browser.
-
-## Deploy to hermes
-
-Run `bun run deploy` to check the project, compile one standalone Linux x86-64 executable, and deploy it to `chrono@hermes`. The server needs no Bun or Node installation. The executable contains the runtime bot; registration, command cleanup and avatar maintenance remain local tools.
-
-The executable lives at `~/.local/share/autorole/autorole`. Discord credentials are stored separately at `~/.config/autorole/env` with mode `600`. The deployment transfers only the three Discord configuration variables and checks that the bot token is absent from the executable.
-
-The `autorole.service` user unit starts at boot and restarts on failure. User lingering is already enabled on hermes. View status with `ssh chrono@hermes systemctl --user status autorole.service` and logs with `ssh chrono@hermes journalctl --user -u autorole.service -n 50 --no-pager`. Restart it with `ssh chrono@hermes systemctl --user restart autorole.service`.
-
-## Source layout
-
-`src/index.ts` starts the bot. `src/bot/` contains the bot lifecycle, command handling and role assignment. `src/config/` contains environment validation and Discord integration settings. `src/cli/` contains command registration, command cleanup and avatar maintenance. Deployment and image-processing helpers remain in `scripts/`.
+```sh
+ssh chrono@hermes systemctl --user status autorole.service
+ssh chrono@hermes journalctl --user -u autorole.service -n 50 --no-pager
+```

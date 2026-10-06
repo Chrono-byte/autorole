@@ -28,6 +28,8 @@ if (Buffer.from(await Bun.file("dist/autorole").arrayBuffer()).includes(Buffer.f
 chmod 600 .tmp/deploy/runtime.env
 
 ssh -o BatchMode=yes -o ConnectTimeout=10 "$deploy_host" '
+  set -eu
+  command -v systemd-notify >/dev/null
   umask 077
   mkdir -p .local/share/autorole .config/autorole .config/systemd/user
   chmod 700 .config/autorole

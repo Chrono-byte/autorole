@@ -3,10 +3,13 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import {
   Client,
+  DiscordAPIError,
+  HTTPError,
   PermissionFlagsBits,
   Routes,
   type ApplicationCommandPermissions,
 } from "discord.js";
+import { AssignmentQueue } from "../src/bot/AssignmentQueue";
 import { Configuration } from "../src/config/Configuration";
 import { IntegrationSettings } from "../src/config/IntegrationSettings";
 import { RoleService } from "../src/bot/RoleService";
@@ -28,6 +31,8 @@ class DiscordFixture {
   appPermissions: ApplicationCommandPermissions[] = [];
   includeOverrides = true;
   permissionRequestFails = false;
+  memberLeft = false;
+  permissionError = new Error("Discord permissions unavailable");
   manageRoles = true;
   targetPosition = 1;
   pending = false;
@@ -70,7 +75,7 @@ class DiscordFixture {
       ];
     }
     if (route === Routes.guildApplicationCommandsPermissions(ids.app, ids.guild)) {
-      if (this.permissionRequestFails) throw new Error("Discord permissions unavailable");
+      if (this.permissionRequestFails) throw this.permissionError;
       return [
         {
           id: ids.app,
@@ -91,6 +96,15 @@ class DiscordFixture {
       ];
     }
     if (route === Routes.guildMember(ids.guild, ids.member)) {
+      if (this.memberLeft)
+        throw new DiscordAPIError(
+          { message: "Unknown Member", code: 10007 },
+          10007,
+          404,
+          "GET",
+          "https://discord.com",
+          {},
+        );
       return {
         user: {
           id: ids.member,
@@ -140,7 +154,7 @@ class DiscordFixture {
     );
   }
 
-  async assign() {
+  async setup() {
     const config = new Configuration({
       DISCORD_TOKEN: "fixture",
       DISCORD_APPLICATION_ID: ids.app,
@@ -148,7 +162,12 @@ class DiscordFixture {
     });
     const guild = await this.client.guilds.fetch({ guild: ids.guild, force: true });
     const member = await guild.members.fetch({ user: ids.member, force: true });
-    await new RoleService(new IntegrationSettings(config)).assign(member);
+    return { member, roles: new RoleService(new IntegrationSettings(config)) };
+  }
+
+  async assign() {
+    const { member, roles } = await this.setup();
+    await roles.assign(member);
   }
 
   async close() {
@@ -294,5 +313,123 @@ test("status resolves the same validated role without assigning it", async () =>
     fixture.permissionRequestFails = true;
     await expect(roles.getConfiguredRole(guild)).rejects.toThrow("permissions unavailable");
     expect(fixture.writes).toEqual([]);
+  });
+});
+
+test("queue recovers from a transient failure and deduplicates events", async () => {
+  await withDiscord(async (fixture) => {
+    const { member, roles } = await fixture.setup();
+    fixture.permissionRequestFails = true;
+    fixture.permissionError = new HTTPError(503, "Unavailable", "GET", "https://discord.com", {});
+    const attempts: number[] = [];
+    const queue = new AssignmentQueue(
+      roles,
+      (_error, _member, attempt, retrying) => {
+        attempts.push(attempt);
+        expect(retrying).toBe(true);
+        fixture.permissionRequestFails = false;
+      },
+      [1],
+    );
+    const first = queue.enqueue(member);
+    expect(queue.enqueue(member)).toBe(first);
+    await first;
+    expect(attempts).toEqual([1]);
+    expect(fixture.writes).toEqual([Routes.guildMemberRole(ids.guild, ids.member, ids.target)]);
+    queue.stop();
+  });
+});
+
+for (const change of ["replacement", "disabled", "pending", "existing"]) {
+  test(`retry rechecks current member and configuration: ${change}`, async () => {
+    await withDiscord(async (fixture) => {
+      const { member, roles } = await fixture.setup();
+      fixture.permissionRequestFails = true;
+      fixture.permissionError = Object.assign(new Error("network reset"), { code: "ECONNRESET" });
+      const queue = new AssignmentQueue(roles, () => {
+        fixture.permissionRequestFails = false;
+        if (change === "replacement")
+          fixture.permissions = [{ id: ids.replacement, type: 1, permission: true }];
+        if (change === "disabled") fixture.permissions = [];
+        if (change === "pending") fixture.pending = true;
+        if (change === "existing") fixture.existingRoles = [ids.target];
+      }, [1]);
+      await queue.enqueue(member);
+      expect(fixture.writes).toEqual(
+        change === "replacement"
+          ? [Routes.guildMemberRole(ids.guild, ids.member, ids.replacement)]
+          : [],
+      );
+      queue.stop();
+    });
+  });
+}
+
+test("queue does not retry permanent errors", async () => {
+  await withDiscord(async (fixture) => {
+    fixture.manageRoles = false;
+    const { member, roles } = await fixture.setup();
+    const reports: boolean[] = [];
+    const queue = new AssignmentQueue(
+      roles,
+      (_error, _member, _attempt, retrying) => reports.push(retrying),
+      [1],
+    );
+    await queue.enqueue(member);
+    expect(reports).toEqual([false]);
+    expect(fixture.writes).toEqual([]);
+    queue.stop();
+  });
+});
+
+test("queue exhausts bounded retries", async () => {
+  await withDiscord(async (fixture) => {
+    const { member, roles } = await fixture.setup();
+    fixture.permissionRequestFails = true;
+    fixture.permissionError = new HTTPError(503, "Unavailable", "GET", "https://discord.com", {});
+    const reports: boolean[] = [];
+    const queue = new AssignmentQueue(
+      roles,
+      (_error, _member, _attempt, retrying) => reports.push(retrying),
+      [1, 1, 1],
+    );
+    await queue.enqueue(member);
+    expect(reports).toEqual([true, true, true, false]);
+    expect(fixture.writes).toEqual([]);
+    queue.stop();
+  });
+});
+
+test("shutdown cancels pending retries and rejects new work", async () => {
+  await withDiscord(async (fixture) => {
+    const { member, roles } = await fixture.setup();
+    fixture.permissionRequestFails = true;
+    fixture.permissionError = Object.assign(new Error("network reset"), { code: "ECONNRESET" });
+    let reports = 0;
+    const queue = new AssignmentQueue(roles, () => {
+      reports++;
+      queue.stop();
+    }, [30000]);
+    await queue.enqueue(member);
+    await queue.enqueue(member);
+    expect(reports).toBe(1);
+    expect(fixture.writes).toEqual([]);
+  });
+});
+
+test("retry stops when the member has left", async () => {
+  await withDiscord(async (fixture) => {
+    const { member, roles } = await fixture.setup();
+    fixture.permissionRequestFails = true;
+    fixture.permissionError = Object.assign(new Error("network reset"), { code: "ECONNRESET" });
+    let reports = 0;
+    const queue = new AssignmentQueue(roles, () => {
+      reports++;
+      fixture.memberLeft = true;
+    }, [1, 1]);
+    await queue.enqueue(member);
+    expect(reports).toBe(1);
+    expect(fixture.writes).toEqual([]);
+    queue.stop();
   });
 });

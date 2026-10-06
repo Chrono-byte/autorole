@@ -2,7 +2,9 @@
 Description=Discord autorole bot
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=all
+TimeoutStartSec=60
 WorkingDirectory=%h/.local/share/autorole
 EnvironmentFile=%h/.config/autorole/env
 ExecStart=%h/.local/share/autorole/autorole

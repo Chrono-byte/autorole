@@ -15,7 +15,7 @@
     "clean-commands": "bun run src/cli/clean-commands.ts",
     "avatar": "bun run src/cli/set-avatar.ts",
     "lint:fix": "oxlint --fix --deny-warnings .",
-    "build:binary": "bun build --compile --target=bun-linux-x64-baseline --env=disable --no-compile-autoload-dotenv --no-compile-autoload-bunfig src/index.ts --outfile dist/autorole",
+    "build:binary": "bun build --compile --minify --keep-names --target=bun-linux-x64-baseline --env=disable --no-compile-autoload-dotenv --no-compile-autoload-bunfig src/index.ts --outfile dist/autorole",
     "deploy": "sh scripts/deploy.sh"
   },
   "dependencies": {
