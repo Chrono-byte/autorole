@@ -2,6 +2,7 @@ import { PermissionFlagsBits, type Guild, type GuildMember, type Role } from "di
 import { IntegrationSettings } from "./IntegrationSettings";
 export class RoleService {
   constructor(private readonly settings: IntegrationSettings) {}
+
   private async validate(guild: Guild, role: Role) {
     const bot = await guild.members.fetchMe();
     if (!bot.permissions.has(PermissionFlagsBits.ManageRoles))
@@ -11,6 +12,7 @@ export class RoleService {
     if (bot.roles.highest.comparePositionTo(role) <= 0)
       throw new Error("Move the bot's highest role above the selected role.");
   }
+
   async assign(member: GuildMember) {
     if (member.user.bot || member.pending) return;
     const role = await this.getConfiguredRole(member.guild);

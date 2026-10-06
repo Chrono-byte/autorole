@@ -39,6 +39,7 @@ export class AutoroleBot {
   start() {
     return this.client.login(this.configuration.token);
   }
+
   stop() {
     return this.client.destroy();
   }

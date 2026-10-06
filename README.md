@@ -59,6 +59,6 @@ On macOS, run `bun run avatar` to apply the original blue Athena image using dis
 
 ## Formatting and linting
 
-Oxfmt and Oxlint are installed as development dependencies. Project rules live in `.oxfmtrc.json` and `.oxlintrc.json`. Run `bun run format` to format files, `bun run lint` to lint, or `bun run lint:fix` to apply safe lint fixes. `bun run check` checks types, lint, formatting and tests. Temporary files and image assets are excluded.
+Oxfmt and Oxlint are installed as development dependencies. Project rules live in `.oxfmtrc.json` and `.oxlintrc.json`. Run `bun run format` to apply safe lint fixes and format files, `bun run lint` to lint, or `bun run lint:fix` to apply safe lint fixes. `bun run check` checks types, lint, formatting and tests. Temporary files and image assets are excluded.
 
-Project-local Zed settings enable Oxfmt on save for TypeScript, JavaScript, JSON, JSONC and Markdown. Zed tasks provide project check, lint and formatting commands. For inline lint diagnostics, install the Oxc extension from Zed’s extension browser.
+Project-local Zed settings run Oxlint fixes before Oxfmt on save for TypeScript and JavaScript, and use Oxfmt for JSON, JSONC and Markdown. The Stylistic class-member spacing rule inserts blank lines around methods while keeping fields grouped together. Zed tasks provide project check, lint and formatting commands. For inline lint diagnostics, install the Oxc extension from Zed’s extension browser.

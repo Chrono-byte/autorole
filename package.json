@@ -8,7 +8,7 @@
     "register": "bun run src/register.ts",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --deny-warnings .",
-    "format": "oxfmt .",
+    "format": "bun run lint:fix && oxfmt .",
     "format:check": "oxfmt --check .",
     "test": "bun test",
     "check": "bun run typecheck && bun run lint && bun run format:check && bun test",
@@ -20,6 +20,7 @@
     "discord.js": "^14.27.0"
   },
   "devDependencies": {
+    "@stylistic/eslint-plugin": "^5.10.0",
     "@types/bun": "latest",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.87.0"

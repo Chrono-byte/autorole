@@ -6,10 +6,33 @@
     "suspicious": "error"
   },
   "rules": {
-    "typescript/no-explicit-any": "error"
+    "typescript/no-explicit-any": "error",
+    "stylistic/lines-between-class-members": [
+      "error",
+      {
+        "enforce": [
+          {
+            "blankLine": "always",
+            "prev": "*",
+            "next": "method"
+          },
+          {
+            "blankLine": "always",
+            "prev": "method",
+            "next": "*"
+          }
+        ]
+      }
+    ]
   },
   "env": {
     "builtin": true
   },
-  "ignorePatterns": ["node_modules/**", ".tmp/**", "assets/**"]
+  "ignorePatterns": ["node_modules/**", ".tmp/**", "assets/**"],
+  "jsPlugins": [
+    {
+      "name": "stylistic",
+      "specifier": "@stylistic/eslint-plugin"
+    }
+  ]
 }

@@ -2,6 +2,7 @@ export class Configuration {
   readonly token: string;
   readonly applicationId: string;
   readonly guildId: string | undefined;
+
   constructor(env = process.env) {
     const token = env.DISCORD_TOKEN?.trim();
     const applicationId = env.DISCORD_APPLICATION_ID?.trim();
