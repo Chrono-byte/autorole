@@ -45,12 +45,7 @@ Command cleanup preserves `/autorole`, `/autorole-target`, and context-menu comm
 ## Deploy
 
 ```sh
-bun run deploy
+bun run deploy user@host
 ```
 
-Checks the project, compiles a standalone Linux executable, and deploys to `chrono@hermes` as a systemd user service. Credentials are stored separately in `~/.config/autorole/env`.
-
-```sh
-ssh chrono@hermes systemctl --user status autorole.service
-ssh chrono@hermes journalctl --user -u autorole.service -n 50 --no-pager
-```
+Checks the project, compiles a standalone Linux executable, and deploys it over SSH as a systemd user service. The destination needs `systemd-notify` and a working user systemd session.
