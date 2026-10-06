@@ -62,3 +62,11 @@ On macOS, run `bun run avatar` to apply the original blue Athena image using dis
 Oxfmt and Oxlint are installed as development dependencies. Project rules live in `.oxfmtrc.json` and `.oxlintrc.json`. Run `bun run format` to apply safe lint fixes and format files, `bun run lint` to lint, or `bun run lint:fix` to apply safe lint fixes. `bun run check` checks types, lint, formatting and tests. Temporary files and image assets are excluded.
 
 Project-local Zed settings run Oxlint fixes before Oxfmt on save for TypeScript and JavaScript, and use Oxfmt for JSON, JSONC and Markdown. The Stylistic class-member spacing rule inserts blank lines around methods while keeping fields grouped together. Zed tasks provide project check, lint and formatting commands. For inline lint diagnostics, install the Oxc extension from Zed’s extension browser.
+
+## Deploy to hermes
+
+Run `bun run deploy` to check the project, compile one standalone Linux x86-64 executable, and deploy it to `chrono@hermes`. The server needs no Bun or Node installation. The executable contains the runtime bot; registration, command cleanup and avatar maintenance remain local tools.
+
+The executable lives at `~/.local/share/autorole/autorole`. Discord credentials are stored separately at `~/.config/autorole/env` with mode `600`. The deployment transfers only the three Discord configuration variables and checks that the bot token is absent from the executable.
+
+The `autorole.service` user unit starts at boot and restarts on failure. User lingering is already enabled on hermes. View status with `ssh chrono@hermes systemctl --user status autorole.service` and logs with `ssh chrono@hermes journalctl --user -u autorole.service -n 50 --no-pager`. Restart it with `ssh chrono@hermes systemctl --user restart autorole.service`.

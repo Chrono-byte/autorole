@@ -1,0 +1,16 @@
+[Unit]
+Description=Discord autorole bot
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/autorole
+EnvironmentFile=%h/.config/autorole/env
+ExecStart=%h/.local/share/autorole/autorole
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target

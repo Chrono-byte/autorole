@@ -14,7 +14,9 @@
     "check": "bun run typecheck && bun run lint && bun run format:check && bun test",
     "clean-commands": "bun run src/clean-commands.ts",
     "avatar": "bun run src/set-avatar.ts",
-    "lint:fix": "oxlint --fix --deny-warnings ."
+    "lint:fix": "oxlint --fix --deny-warnings .",
+    "build:binary": "bun build --compile --target=bun-linux-x64-baseline --env=disable --no-compile-autoload-dotenv --no-compile-autoload-bunfig index.ts --outfile dist/autorole",
+    "deploy": "sh scripts/deploy.sh"
   },
   "dependencies": {
     "discord.js": "^14.27.0"
