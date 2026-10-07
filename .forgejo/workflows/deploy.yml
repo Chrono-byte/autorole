@@ -1,4 +1,4 @@
-name: Deploy Athena to hermes
+name: Deploy Athena to osiris
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: autorole-hermes
+  group: autorole-osiris
   cancel-in-progress: false
 
 jobs:
@@ -37,9 +37,9 @@ jobs:
 
       - name: Deploy and wait for Discord readiness
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_HOST: chrono@10.0.0.28
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_KNOWN_HOSTS: "10.0.0.28 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBMG5RLxl/lKd13mZC5UpdO6zH3K02v07QcP5SFxZ5+"
         run: |
           set -eu
           umask 077

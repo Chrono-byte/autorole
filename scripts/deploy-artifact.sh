@@ -3,7 +3,7 @@ set -eu
 umask 077
 
 cd "$(dirname "$0")/.."
-deploy_host=${1:-chrono@hermes}
+deploy_host=${1:-chrono@osiris}
 test -f dist/autorole
 
 ssh -o BatchMode=yes -o ConnectTimeout=10 "$deploy_host" '

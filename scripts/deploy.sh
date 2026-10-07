@@ -3,7 +3,7 @@ set -eu
 umask 077
 
 cd "$(dirname "$0")/.."
-deploy_host=${1:-chrono@hermes}
+deploy_host=${1:-chrono@osiris}
 
 bun run check
 bun run build:binary
