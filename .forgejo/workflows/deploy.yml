@@ -16,6 +16,15 @@ jobs:
     if: forgejo.ref == 'refs/heads/main'
     timeout-minutes: 20
     steps:
+      - name: Show runner network
+        run: |
+          hostname
+          hostname -I
+          ip route
+          printf 'Public IP: '
+          curl -fsS --connect-timeout 5 --max-time 10 https://api.ipify.org
+          echo
+
       - name: Check out repository
         uses: https://data.forgejo.org/actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
