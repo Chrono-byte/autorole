@@ -20,7 +20,11 @@ jobs:
         run: |
           hostname
           hostname -I
-          ip route
+          if command -v ip >/dev/null; then
+            ip route
+          else
+            cat /proc/net/route
+          fi
           printf 'Public IP: '
           curl -fsS --connect-timeout 5 --max-time 10 https://api.ipify.org
           echo
