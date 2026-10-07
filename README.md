@@ -46,7 +46,7 @@ Command cleanup preserves `/autorole`, `/autorole-target`, and context-menu comm
 
 Forgejo Actions deploys on pushes to `main`, or manually from the repository's Actions page. The workflow uses the `ci` runner to install locked dependencies, run checks, compile the executable, and deploy to osiris over SSH. Deployments run one at a time and wait until the bot connects to Discord.
 
-The repository secret `DEPLOY_SSH_KEY` holds the dedicated deploy key. The workflow pins Osiris’s LAN address (`chrono@10.0.0.28`) and verified SSH host key. Discord credentials stay on osiris at `~/.config/autorole/env`; Actions does not read or replace them. The runner reaches osiris over the LAN; its address is configured in the workflow.
+The repository secret `DEPLOY_SSH_KEY` holds the dedicated deploy key. The workflow pins Osiris’s Tailscale address (`chrono@100.65.83.93`) and verified SSH host key. Discord credentials stay on osiris at `~/.config/autorole/env`; Actions does not read or replace them. The runner host runs Tailscale, and its job containers reach osiris through the host’s Tailscale connection; the destination address is configured in the workflow.
 
 For a local deployment that also updates the server's Discord credentials:
 
