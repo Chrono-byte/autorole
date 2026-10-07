@@ -14,6 +14,7 @@ const overwatchStatuses = [
   "Heroes never die!",
   "Nerf this!",
   "The world could always use more heroes",
+  "egg",
 ] satisfies [string, ...string[]];
 
 export class AutoroleBot {
