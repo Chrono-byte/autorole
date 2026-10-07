@@ -29,6 +29,18 @@ jobs:
           curl -fsS --connect-timeout 5 --max-time 10 https://api.ipify.org
           echo
 
+      - name: Probe Horus on the LAN
+        run: |
+          if ! command -v ping >/dev/null; then
+            apt-get update -qq
+            apt-get install -y -qq iputils-ping
+          fi
+          ping -c 3 -W 2 192.168.1.47
+          # Hold a TCP connection so Horus can observe the runner host's LAN IP.
+          exec 3<>/dev/tcp/192.168.1.47/22
+          sleep 15
+          exec 3>&-
+
       - name: Check out repository
         uses: https://data.forgejo.org/actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
