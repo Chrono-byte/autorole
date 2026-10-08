@@ -1,6 +1,6 @@
 import { ApplicationCommandType, REST, Routes } from "discord.js";
 import { AutoroleCommands } from "../bot/AutoroleCommands";
-import { Configuration } from "../config/Configuration";
+import { readConfiguration, type Configuration } from "../config/Configuration";
 
 export class CommandCleaner {
   constructor(
@@ -55,5 +55,5 @@ if (import.meta.main) {
   if (args.length !== 1 || (flag !== "--guild" && flag !== "--global")) {
     throw new Error("Usage: bun run clean-commands --guild | --global");
   }
-  await new CommandCleaner(new Configuration()).clean(flag === "--guild" ? "guild" : "global");
+  await new CommandCleaner(readConfiguration()).clean(flag === "--guild" ? "guild" : "global");
 }

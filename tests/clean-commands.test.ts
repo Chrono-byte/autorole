@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { REST, Routes } from "discord.js";
 import { CommandCleaner } from "../src/cli/clean-commands";
-import { Configuration } from "../src/config/Configuration";
+import { readConfiguration } from "../src/config/Configuration";
 
 const applicationId = "100000000000000001";
 const guildId = "100000000000000002";
@@ -16,7 +16,7 @@ const commands = [
 
 for (const scope of ["guild", "global"]) {
   test(`cleanup removes only obsolete slash commands in ${scope} scope`, async () => {
-    const config = new Configuration({
+    const config = readConfiguration({
       DISCORD_TOKEN: "fixture",
       DISCORD_APPLICATION_ID: applicationId,
       DISCORD_GUILD_ID: guildId,
@@ -45,7 +45,7 @@ for (const scope of ["guild", "global"]) {
 }
 
 test("cleanup validates the whole list before deleting anything", async () => {
-  const config = new Configuration({
+  const config = readConfiguration({
     DISCORD_TOKEN: "fixture",
     DISCORD_APPLICATION_ID: applicationId,
   });
@@ -64,7 +64,7 @@ test("cleanup validates the whole list before deleting anything", async () => {
 });
 
 test("guild cleanup without a guild ID fails before contacting Discord", async () => {
-  const config = new Configuration({
+  const config = readConfiguration({
     DISCORD_TOKEN: "fixture",
     DISCORD_APPLICATION_ID: applicationId,
   });

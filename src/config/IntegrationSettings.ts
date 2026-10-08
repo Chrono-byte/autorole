@@ -3,16 +3,15 @@ import {
   type ApplicationCommandPermissions,
   type Guild,
 } from "discord.js";
-import { Configuration } from "./Configuration";
 
 export class IntegrationSettings {
-  constructor(private readonly config: Configuration) {}
+  constructor(private readonly guildId: string | undefined) {}
 
   async getRoleId(guild: Guild) {
-    if (this.config.guildId && this.config.guildId !== guild.id) return null;
+    if (this.guildId && this.guildId !== guild.id) return null;
     const application = guild.client.application;
     if (!application) throw new Error("Discord application is not ready.");
-    const commands = this.config.guildId
+    const commands = this.guildId
       ? await guild.commands.fetch()
       : await application.commands.fetch();
     const target = commands.find((command) => command.name === "autorole-target");

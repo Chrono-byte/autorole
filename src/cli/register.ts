@@ -1,5 +1,5 @@
 import { REST, Routes } from "discord.js";
-import { Configuration } from "../config/Configuration";
+import { readConfiguration, type Configuration } from "../config/Configuration";
 import { AutoroleCommands } from "../bot/AutoroleCommands";
 
 class CommandRegistrar {
@@ -20,4 +20,4 @@ class CommandRegistrar {
   }
 }
 
-await new CommandRegistrar(new Configuration()).register();
+await new CommandRegistrar(readConfiguration()).register();

@@ -10,7 +10,7 @@ import {
   type ApplicationCommandPermissions,
 } from "discord.js";
 import { AssignmentQueue } from "../src/bot/AssignmentQueue";
-import { Configuration } from "../src/config/Configuration";
+import { readConfiguration } from "../src/config/Configuration";
 import { IntegrationSettings } from "../src/config/IntegrationSettings";
 import { RoleService } from "../src/bot/RoleService";
 import { AutoroleCommands } from "../src/bot/AutoroleCommands";
@@ -155,14 +155,14 @@ class DiscordFixture {
   }
 
   async setup() {
-    const config = new Configuration({
+    const config = readConfiguration({
       DISCORD_TOKEN: "fixture",
       DISCORD_APPLICATION_ID: ids.app,
       ...(this.global ? {} : { DISCORD_GUILD_ID: ids.guild }),
     });
     const guild = await this.client.guilds.fetch({ guild: ids.guild, force: true });
     const member = await guild.members.fetch({ user: ids.member, force: true });
-    return { member, roles: new RoleService(new IntegrationSettings(config)) };
+    return { member, roles: new RoleService(new IntegrationSettings(config.guildId)) };
   }
 
   async assign() {
@@ -299,12 +299,12 @@ test("denying the configured role disables assignment", async () => {
 
 test("status resolves the same validated role without assigning it", async () => {
   await withDiscord(async (fixture) => {
-    const config = new Configuration({
+    const config = readConfiguration({
       DISCORD_TOKEN: "fixture",
       DISCORD_APPLICATION_ID: ids.app,
       DISCORD_GUILD_ID: ids.guild,
     });
-    const roles = new RoleService(new IntegrationSettings(config));
+    const roles = new RoleService(new IntegrationSettings(config.guildId));
     const guild = await fixture.client.guilds.fetch(ids.guild);
     expect((await roles.getConfiguredRole(guild))?.id).toBe(ids.target);
     fixture.permissions = [];

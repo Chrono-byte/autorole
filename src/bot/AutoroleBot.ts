@@ -1,5 +1,5 @@
 import { ActivityType, Client, DiscordAPIError, Events, GatewayIntentBits } from "discord.js";
-import { Configuration } from "../config/Configuration";
+import { type Configuration } from "../config/Configuration";
 import { IntegrationSettings } from "../config/IntegrationSettings";
 import { RoleService } from "./RoleService";
 import { AutoroleCommands } from "./AutoroleCommands";
@@ -25,7 +25,7 @@ export class AutoroleBot {
   });
 
   constructor(private readonly configuration: Configuration) {
-    const settings = new IntegrationSettings(configuration);
+    const settings = new IntegrationSettings(configuration.guildId);
     const roles = new RoleService(settings);
     const commands = new AutoroleCommands(roles);
     this.assignments = new AssignmentQueue(roles, (error, member, attempt, retrying) => {

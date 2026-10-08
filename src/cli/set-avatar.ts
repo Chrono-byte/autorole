@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const runCommand = promisify(execFile);
-import { Configuration } from "../config/Configuration";
+import { readConfiguration, type Configuration } from "../config/Configuration";
 
 class BotAvatarUpdater {
   private readonly rest: REST;
@@ -70,7 +70,7 @@ class BotAvatarUpdater {
 }
 
 try {
-  await new BotAvatarUpdater(new Configuration()).run(process.argv[2]);
+  await new BotAvatarUpdater(readConfiguration()).run(process.argv[2]);
 } catch (error) {
   process.stderr.write(
     `Avatar update failed: ${error instanceof Error ? error.message : "Unknown error"}\n`,
