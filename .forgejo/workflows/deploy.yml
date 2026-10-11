@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ci
+    runs-on: deploy
     if: forgejo.ref == 'refs/heads/main'
     timeout-minutes: 20
     steps:
