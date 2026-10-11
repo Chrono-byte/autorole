@@ -16,8 +16,6 @@ export class IntegrationSettings {
       : await application.commands.fetch();
     const target = commands.find((command) => command.name === "autorole-target");
     if (!target) throw new Error("Run bun run register to register /autorole-target.");
-    // Fetch explicit command overrides only. Application-wide permissions are access
-    // controls and must never implicitly become autorole configuration.
     const permissions = await guild.commands.permissions.fetch({});
     return IntegrationSettings.selectRole(guild.id, permissions.get(target.id) ?? []);
   }

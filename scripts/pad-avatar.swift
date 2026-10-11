@@ -2,7 +2,6 @@ import Foundation
 import CoreGraphics
 import ImageIO
 
-// Match the original border color and blend the outer 8%, preserving bright artwork.
 let arguments = CommandLine.arguments
 guard arguments.count == 3 else { fatalError("Usage: pad-avatar.swift input.png output.png") }
 let inputURL = URL(fileURLWithPath: arguments[1])
@@ -27,7 +26,6 @@ original.withUnsafeMutableBytes { bytes in
     }
     context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
 }
-// Median edge colors exclude the blue glow and occasional bright pixels.
 var edgeColors = [[UInt8](), [UInt8](), [UInt8]()]
 for y in 0..<height {
     for x in 0..<width where min(x, width - 1 - x, y, height - 1 - y) < 4 {

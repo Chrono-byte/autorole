@@ -133,9 +133,6 @@ class DiscordFixture {
   });
 
   constructor(readonly global = false) {
-    // Replay discord.js's READY handler to initialize real ClientUser and
-    // ClientApplication objects without opening a network connection. All guild,
-    // member, role and permission managers below are the real discord.js objects.
     const require = createRequire(import.meta.url);
     const ready: unknown = require(
       join(dirname(require.resolve("discord.js")), "client/websocket/handlers/READY.js"),

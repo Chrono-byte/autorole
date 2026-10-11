@@ -8,7 +8,6 @@ deploy_host=${1:-chrono@osiris}
 bun run check
 bun run build:binary
 mkdir -p .tmp/deploy
-# Export only the runtime configuration, never the rest of the local environment.
 bun -e '
 import { readConfiguration } from "./src/config/Configuration";
 const config = readConfiguration();
