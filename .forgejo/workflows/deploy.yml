@@ -35,23 +35,31 @@ jobs:
       - name: Compile standalone executable
         run: bun run build:binary
 
+      - name: Check restricted receiver
+        run: |
+          command -v python3 >/dev/null || { apt-get update -qq; apt-get install -y -qq python3; }
+          python3 -m unittest discover -s deploy -p 'test_*.py'
+      - name: Install verified Tailscale and SSH client
+        run: |
+          command -v ssh >/dev/null || { apt-get update -qq; apt-get install -y -qq openssh-client; }
+          bash deploy/install-tailscale.sh
+      - name: Identify the legacy deployment key for retirement
+        env:
+          LEGACY_DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          if [ -n "$LEGACY_DEPLOY_KEY" ]; then
+            umask 077
+            key=$(mktemp)
+            trap 'rm -f "$key"' EXIT
+            printf '%s\n' "$LEGACY_DEPLOY_KEY" > "$key"
+            unset LEGACY_DEPLOY_KEY
+            printf 'LEGACY_KEY_FINGERPRINT='
+            ssh-keygen -lf "$key" | awk '{print $2}'
+          fi
       - name: Deploy and wait for Discord readiness
         env:
-          DEPLOY_HOST: chrono@100.65.83.93
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: "100.65.83.93 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBMG5RLxl/lKd13mZC5UpdO6zH3K02v07QcP5SFxZ5+"
-        run: |
-          set -eu
-          umask 077
-          test -n "$DEPLOY_HOST"
-          test -n "$DEPLOY_SSH_KEY"
-          test -n "$DEPLOY_KNOWN_HOSTS"
-          command -v ssh >/dev/null
-          command -v scp >/dev/null
-          mkdir -p "$HOME/.ssh"
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
-          eval "$(ssh-agent -s)" >/dev/null
-          trap 'ssh-agent -k >/dev/null' EXIT
-          printf '%s\n' "$DEPLOY_SSH_KEY" | ssh-add -
-          unset DEPLOY_SSH_KEY
-          bun run deploy:artifact "$DEPLOY_HOST"
+          TS_OAUTH_CLIENT_SECRET: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          DEPLOY_SSH_KEY: ${{ secrets.ATHENA_DEPLOY_SSH_KEY }}
+          FORGEJO_RUN_ID: ${{ forgejo.run_id }}
+          FORGEJO_RUN_ATTEMPT: ${{ forgejo.run_attempt }}
+        run: bash scripts/deploy-artifact.sh

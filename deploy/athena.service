@@ -1,0 +1,26 @@
+[Unit]
+Description=Athena Discord autorole bot
+
+[Service]
+Type=notify
+NotifyAccess=all
+TimeoutStartSec=60
+WorkingDirectory=/var/lib/athena
+EnvironmentFile=/var/lib/athena/runtime.env
+ExecStart=/var/lib/athena/current
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+TimeoutStopFailureMode=kill
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/var/lib/athena
+RestrictSUIDSGID=yes
+LockPersonality=yes
+UMask=0077
+LimitCORE=0
+
+[Install]
+WantedBy=default.target

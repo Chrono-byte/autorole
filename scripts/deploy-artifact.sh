@@ -1,29 +1,9 @@
-#!/bin/sh
-set -eu
-umask 077
-
-cd "$(dirname "$0")/.."
-deploy_host=${1:-chrono@osiris}
+#!/usr/bin/env bash
+set -euo pipefail
+cd -- "$(dirname -- "$0")/.."
+export DEPLOY_HOST=100.65.83.93 DEPLOY_USER=athena
+export DEPLOY_HOST_KEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBMG5RLxl/lKd13mZC5UpdO6zH3K02v07QcP5SFxZ5+'
 test -f dist/autorole
-
-ssh -o BatchMode=yes -o ConnectTimeout=10 "$deploy_host" '
-  set -eu
-  command -v systemd-notify >/dev/null
-  test -s .config/autorole/env
-  umask 077
-  mkdir -p .local/share/autorole .config/systemd/user
-'
-scp -C -o BatchMode=yes -o ConnectTimeout=10 dist/autorole "$deploy_host:.local/share/autorole/autorole.new"
-scp -o BatchMode=yes -o ConnectTimeout=10 deploy/autorole.service "$deploy_host:.config/systemd/user/autorole.service.new"
-ssh -o BatchMode=yes -o ConnectTimeout=10 "$deploy_host" '
-  set -eu
-  chmod 700 .local/share/autorole/autorole.new
-  chmod 600 .config/systemd/user/autorole.service.new
-  mv .local/share/autorole/autorole.new .local/share/autorole/autorole
-  mv .config/systemd/user/autorole.service.new .config/systemd/user/autorole.service
-  systemctl --user daemon-reload
-  systemctl --user enable autorole.service
-  # Type=notify waits for the bot to connect to Discord before reporting success.
-  systemctl --user restart autorole.service
-  systemctl --user is-active autorole.service
-'
+checksum=$(sha256sum dist/autorole | cut -d' ' -f1)
+size=$(stat -c %s dist/autorole)
+{ git rev-parse HEAD; printf '%s %s\n' "$checksum" "$size"; cat dist/autorole; } | bash deploy/tailscale-ssh.sh

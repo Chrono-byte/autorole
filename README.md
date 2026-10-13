@@ -44,16 +44,16 @@ Command cleanup preserves `/autorole`, `/autorole-target`, and context-menu comm
 
 ## Deploy
 
-Forgejo Actions deploys on pushes to `main`, or manually from the repository's Actions page. The workflow uses the `ci` runner to install locked dependencies, run checks, compile the executable, and deploy to osiris over SSH. Deployments run one at a time and wait until the bot connects to Discord.
+Forgejo Actions deploys on pushes to `main`, or manually from the repository's Actions page. The dedicated `deploy` runner installs locked dependencies, runs checks, compiles the executable, and uses the restricted receiver below. Deployments run one at a time and wait for Discord readiness.
 
-The repository secret `DEPLOY_SSH_KEY` holds the dedicated deploy key. The workflow pins Osiris’s Tailscale address (`chrono@100.65.83.93`) and verified SSH host key. Discord credentials stay on osiris at `~/.config/autorole/env`; Actions does not read or replace them. The runner host runs Tailscale, and its job containers reach osiris through the host’s Tailscale connection; the destination address is configured in the workflow.
+`bun run deploy` dispatches that same workflow using an authenticated `fj` CLI. It does not copy local credentials or open an administrative SSH session. Change runtime credentials deliberately on Osiris as an administrator. The CI-only `bun run deploy:artifact` sends an existing `dist/autorole` through the same restricted path, using deployment credentials provided in the job environment.
 
-For a local deployment that also updates the server's Discord credentials:
+## Restricted production deployment
 
-```sh
-bun run deploy user@host
-```
+The production workflow uses the same isolated SSH client as Guildmaster and the NAS: `deploy/tailscale-ssh.sh`, vendored unchanged from `satet-infra`. Its Tailscale binaries are pinned and checksum-verified. A job-local userspace daemon authenticates as `tag:deploy`; no runner host socket, privileged container, or forwarded agent is needed.
 
-Checks the project, compiles a standalone Linux executable, and deploys it over SSH as a systemd user service. The destination needs `systemd-notify` and a working user systemd session.
+The job connects to `athena@100.65.83.93:2222` using a pinned host key and the repository's `ATHENA_DEPLOY_SSH_KEY`. `TS_OAUTH_CLIENT_SECRET` must be scoped to Auth Keys Write for `tag:deploy`. Runtime credentials remain in `/var/lib/athena/runtime.env`; Athena has no sudo and its service cannot write its executable or configuration.
 
-`bun run deploy:artifact user@host` deploys an existing `dist/autorole` without replacing credentials. This is the command the workflow uses.
+An administrator installs `deploy/receive.py`, `deploy/athena.service`, and the public key using `sudo bash deploy/setup-osiris.sh prepare PUBLIC_KEY_FILE`. The receiver accepts only `verify` or `deploy`, with a commit SHA, executable checksum and byte count, followed by a bounded Linux x86-64 executable. CI cannot upload service definitions, choose server paths, or run a shell. Cut over with `sudo bash deploy/setup-osiris.sh cutover`; the current live executable and environment are copied, and the legacy service is stopped before the dedicated service starts. A failure stops the replacement before restarting the legacy service.
+
+Systemd's Type=notify checks Discord readiness. Failed updates restore the previous executable. Keep application data migrations compatible with rollback. After the first successful new CI deployment, remove the old repository deployment secret and revoke its public key if it is a deployment-only key; do not remove personal administrator keys.
