@@ -59,6 +59,8 @@ assert callable(runpy.run_path(sys.argv[1]).get('activate'))
 PY
   exec 9>"$home/migration.lock"
   flock -n 9
+  # Exercise the notification helper inside the installed sandbox before stopping legacy.
+  as_user athena /usr/bin/bash -s -- /etc/systemd/user/athena.service < "$directory/check-readiness.sh"
   initial="$home/releases/initial-$(date +%s)"
   install -m 700 -o athena -g athena /home/chrono/.local/share/autorole/autorole "$initial"
   install -m 640 -o root -g athena /home/chrono/.config/autorole/env "$home/runtime.env"

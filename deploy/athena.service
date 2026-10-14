@@ -15,7 +15,9 @@ TimeoutStopFailureMode=kill
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
-ProtectHome=yes
+ProtectHome=tmpfs
+# Keep homes hidden while allowing Discord readiness notifications.
+BindReadOnlyPaths=%t/systemd/notify
 ReadOnlyPaths=/var/lib/athena
 RestrictSUIDSGID=yes
 LockPersonality=yes
