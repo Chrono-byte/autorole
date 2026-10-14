@@ -43,19 +43,6 @@ jobs:
         run: |
           command -v ssh >/dev/null || { apt-get update -qq; apt-get install -y -qq openssh-client; }
           bash deploy/install-tailscale.sh
-      - name: Identify the legacy deployment key for retirement
-        env:
-          LEGACY_DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-        run: |
-          if [ -n "$LEGACY_DEPLOY_KEY" ]; then
-            umask 077
-            key=$(mktemp)
-            trap 'rm -f "$key"' EXIT
-            printf '%s\n' "$LEGACY_DEPLOY_KEY" > "$key"
-            unset LEGACY_DEPLOY_KEY
-            printf 'LEGACY_KEY_FINGERPRINT='
-            ssh-keygen -lf "$key" | awk '{print $2}'
-          fi
       - name: Deploy and wait for Discord readiness
         env:
           TS_OAUTH_CLIENT_SECRET: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
