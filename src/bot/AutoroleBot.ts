@@ -14,7 +14,6 @@ const overwatchStatuses = [
   "It's high noon.",
   "Ryūjin no ken wo kurae!",
   "Justice rains from above!",
-  "火をつけろ！",
   "D.Va: 1, Bad guys: 0.",
   "Heroes never die!",
   "Nerf this!",
