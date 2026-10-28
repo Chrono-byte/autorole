@@ -6,6 +6,7 @@ import {
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
+import { logError } from "../logger";
 import { RoleService } from "./RoleService";
 
 export class AutoroleCommands {
@@ -76,6 +77,10 @@ export class AutoroleCommands {
         `Autorole: <@&${role.id}>. Bot permissions and hierarchy are valid. New human members receive this role after membership screening. To disable, remove or deny its entry on /autorole-target in Integrations.`,
       );
     } catch (error) {
+      logError("autorole_status_failed", {
+        guildId: guild.id,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
       await interaction.editReply(
         error instanceof Error ? error.message : "Unable to read Discord integration settings.",
       );

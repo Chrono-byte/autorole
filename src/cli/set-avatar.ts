@@ -2,6 +2,7 @@ import { REST, Routes } from "discord.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { logError } from "../logger";
 
 const runCommand = promisify(execFile);
 import { readConfiguration, type Configuration } from "../config/Configuration";
@@ -72,8 +73,8 @@ class BotAvatarUpdater {
 try {
   await new BotAvatarUpdater(readConfiguration()).run(process.argv[2]);
 } catch (error) {
-  process.stderr.write(
-    `Avatar update failed: ${error instanceof Error ? error.message : "Unknown error"}\n`,
-  );
+  logError("avatar_update_failed", {
+    message: error instanceof Error ? error.message : "Unknown error",
+  });
   process.exitCode = 1;
 }

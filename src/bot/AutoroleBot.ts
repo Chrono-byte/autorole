@@ -1,4 +1,5 @@
 import { ActivityType, Client, DiscordAPIError, Events, GatewayIntentBits } from "discord.js";
+import { logError, logInfo } from "../logger";
 import { type Configuration } from "../config/Configuration";
 import { IntegrationSettings } from "../config/IntegrationSettings";
 import { RoleService } from "./RoleService";
@@ -43,9 +44,12 @@ export class AutoroleBot {
       this.client,
       roles,
       (error, guildId, memberId) => {
-        process.stderr.write(
-          `${JSON.stringify({ event: "autorole_assignment_error", guildId, memberId, code: error instanceof DiscordAPIError ? error.code : undefined, message: error instanceof Error ? error.message : "Unknown error" })}\n`,
-        );
+        logError("autorole_assignment_error", {
+          guildId,
+          memberId,
+          code: error instanceof DiscordAPIError ? error.code : undefined,
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
       },
       configuration.guildId,
     );
@@ -68,7 +72,7 @@ export class AutoroleBot {
       updatePresence();
       this.presenceTimer = setInterval(updatePresence, 60_000);
       this.presenceTimer.unref();
-      process.stdout.write(`Connected as ${client.user.tag}\n`);
+      logInfo("autorole_connected", { user: client.user.tag });
       void notifyReady().catch((error) => {
         this.report(error);
         process.exitCode = 1;
@@ -92,9 +96,10 @@ export class AutoroleBot {
   }
 
   private report(error: unknown, guildId: string | null = null) {
-    process.stderr.write(
-      `${JSON.stringify({ event: "autorole_error", guildId, message: error instanceof Error ? error.message : "Unknown error" })}\n`,
-    );
+    logError("autorole_error", {
+      guildId,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
   }
 
   start() {
