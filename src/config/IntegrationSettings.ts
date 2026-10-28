@@ -3,21 +3,29 @@ import {
   type ApplicationCommandPermissions,
   type Guild,
 } from "discord.js";
+import { Effect } from "effect";
+import { tryPromise, trySync } from "../effectful";
 
 export class IntegrationSettings {
   constructor(private readonly guildId: string | undefined) {}
 
-  async getRoleId(guild: Guild) {
-    if (this.guildId && this.guildId !== guild.id) return null;
-    const application = guild.client.application;
-    if (!application) throw new Error("Discord application is not ready.");
-    const commands = this.guildId
-      ? await guild.commands.fetch()
-      : await application.commands.fetch();
-    const target = commands.find((command) => command.name === "autorole-target");
-    if (!target) throw new Error("Run bun run register to register /autorole-target.");
-    const permissions = await guild.commands.permissions.fetch({});
-    return IntegrationSettings.selectRole(guild.id, permissions.get(target.id) ?? []);
+  getRoleId(guild: Guild): Effect.Effect<string | null, Error> {
+    const guildId = this.guildId;
+    return Effect.gen(function* () {
+      if (guildId && guildId !== guild.id) return null;
+      const application = guild.client.application;
+      if (!application) return yield* Effect.fail(new Error("Discord application is not ready."));
+      const commands = yield* tryPromise(() =>
+        guildId ? guild.commands.fetch() : application.commands.fetch(),
+      );
+      const target = commands.find((command) => command.name === "autorole-target");
+      if (!target)
+        return yield* Effect.fail(new Error("Run bun run register to register /autorole-target."));
+      const permissions = yield* tryPromise(() => guild.commands.permissions.fetch({}));
+      return yield* trySync(() =>
+        IntegrationSettings.selectRole(guild.id, permissions.get(target.id) ?? []),
+      );
+    });
   }
 
   private static selectRole(

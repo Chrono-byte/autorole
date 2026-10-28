@@ -1,12 +1,15 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { Effect } from "effect";
+import { runCommand } from "../runCommand";
 
-const exec = promisify(execFile);
-
-async function sendNotification() {
-  await exec("systemd-notify", ["--ready", "--status=Connected to Discord"], { timeout: 10000 });
+function sendNotification() {
+  return runCommand("systemd-notify", ["--ready", "--status=Connected to Discord"], {
+    timeout: 10000,
+  }).pipe(Effect.asVoid);
 }
 
-export async function notifyReady(socket = process.env.NOTIFY_SOCKET, notify = sendNotification) {
-  if (socket) await notify();
+export function notifyReady(
+  socket = process.env.NOTIFY_SOCKET,
+  notify = sendNotification,
+): Effect.Effect<void, Error> {
+  return socket ? notify() : Effect.void;
 }

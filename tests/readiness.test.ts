@@ -1,25 +1,23 @@
 import { expect, test } from "bun:test";
+import { Effect } from "effect";
 import { notifyReady } from "../src/bot/notifyReady";
 
 test("local startup skips systemd notification", async () => {
   let calls = 0;
-  await notifyReady("", async () => {
-    calls++;
-  });
+  await Effect.runPromise(notifyReady("", () => Effect.sync(() => calls++).pipe(Effect.asVoid)));
   expect(calls).toBe(0);
 });
 
 test("readiness waits for notification completion and propagates failure", async () => {
   let complete = false;
-  await notifyReady("/run/notify", async () => {
-    await Promise.resolve();
-    complete = true;
-  });
+  await Effect.runPromise(
+    notifyReady("/run/notify", () => Effect.sync(() => (complete = true)).pipe(Effect.asVoid)),
+  );
   expect(complete).toBe(true);
   await expect(
-    notifyReady("/run/notify", async () => {
-      throw new Error("notification failed");
-    }),
+    Effect.runPromise(
+      notifyReady("/run/notify", () => Effect.fail(new Error("notification failed"))),
+    ),
   ).rejects.toThrow("notification failed");
 });
 
@@ -42,7 +40,7 @@ test("notification invokes the helper and detects helper failure", async () => {
         [
           process.execPath,
           "-e",
-          `import { notifyReady } from ${JSON.stringify(source)}; await notifyReady();`,
+          `import { Effect } from "effect"; import { notifyReady } from ${JSON.stringify(source)}; await Effect.runPromise(notifyReady());`,
         ],
         {
           env: {

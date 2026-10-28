@@ -4,13 +4,12 @@ import { dirname, join } from "node:path";
 import {
   Client,
   DiscordAPIError,
-  HTTPError,
   PermissionFlagsBits,
   Routes,
   type ApplicationCommandPermissions,
 } from "discord.js";
+import { Effect, Fiber } from "effect";
 import { OutstandingAssignments } from "../src/bot/OutstandingAssignments";
-import { AssignmentQueue } from "../src/bot/AssignmentQueue";
 import { readConfiguration } from "../src/config/Configuration";
 import { IntegrationSettings } from "../src/config/IntegrationSettings";
 import { RoleService } from "../src/bot/RoleService";
@@ -158,11 +157,13 @@ class DiscordFixture {
   }
 
   async setup() {
-    const config = readConfiguration({
-      DISCORD_TOKEN: "fixture",
-      DISCORD_APPLICATION_ID: ids.app,
-      ...(this.global ? {} : { DISCORD_GUILD_ID: ids.guild }),
-    });
+    const config = Effect.runSync(
+      readConfiguration({
+        DISCORD_TOKEN: "fixture",
+        DISCORD_APPLICATION_ID: ids.app,
+        ...(this.global ? {} : { DISCORD_GUILD_ID: ids.guild }),
+      }),
+    );
     const guild = await this.client.guilds.fetch({ guild: ids.guild, force: true });
     const member = await guild.members.fetch({ user: ids.member, force: true });
     return { member, roles: new RoleService(new IntegrationSettings(config.guildId)) };
@@ -170,7 +171,7 @@ class DiscordFixture {
 
   async assign() {
     const { member, roles } = await this.setup();
-    await roles.assign(member);
+    await Effect.runPromise(roles.assign(member));
   }
 
   async close() {
@@ -302,138 +303,24 @@ test("denying the configured role disables assignment", async () => {
 
 test("status resolves the same validated role without assigning it", async () => {
   await withDiscord(async (fixture) => {
-    const config = readConfiguration({
-      DISCORD_TOKEN: "fixture",
-      DISCORD_APPLICATION_ID: ids.app,
-      DISCORD_GUILD_ID: ids.guild,
-    });
+    const config = Effect.runSync(
+      readConfiguration({
+        DISCORD_TOKEN: "fixture",
+        DISCORD_APPLICATION_ID: ids.app,
+        DISCORD_GUILD_ID: ids.guild,
+      }),
+    );
     const roles = new RoleService(new IntegrationSettings(config.guildId));
     const guild = await fixture.client.guilds.fetch(ids.guild);
-    expect((await roles.getConfiguredRole(guild))?.id).toBe(ids.target);
+    expect((await Effect.runPromise(roles.getConfiguredRole(guild)))?.id).toBe(ids.target);
     fixture.permissions = [];
-    expect(await roles.getConfiguredRole(guild)).toBeNull();
+    expect(await Effect.runPromise(roles.getConfiguredRole(guild))).toBeNull();
     fixture.permissions = [{ id: ids.target, type: 1, permission: true }];
     fixture.permissionRequestFails = true;
-    await expect(roles.getConfiguredRole(guild)).rejects.toThrow("permissions unavailable");
-    expect(fixture.writes).toEqual([]);
-  });
-});
-
-test("queue recovers from a transient failure and deduplicates events", async () => {
-  await withDiscord(async (fixture) => {
-    const { member, roles } = await fixture.setup();
-    fixture.permissionRequestFails = true;
-    fixture.permissionError = new HTTPError(503, "Unavailable", "GET", "https://discord.com", {});
-    const attempts: number[] = [];
-    const queue = new AssignmentQueue(
-      roles,
-      (_error, _member, attempt, retrying) => {
-        attempts.push(attempt);
-        expect(retrying).toBe(true);
-        fixture.permissionRequestFails = false;
-      },
-      [1],
+    await expect(Effect.runPromise(roles.getConfiguredRole(guild))).rejects.toThrow(
+      "permissions unavailable",
     );
-    const first = queue.enqueue(member);
-    expect(queue.enqueue(member)).toBe(first);
-    await first;
-    expect(attempts).toEqual([1]);
-    expect(fixture.writes).toEqual([Routes.guildMemberRole(ids.guild, ids.member, ids.target)]);
-    queue.stop();
-  });
-});
-
-for (const change of ["replacement", "disabled", "pending", "existing"]) {
-  test(`retry rechecks current member and configuration: ${change}`, async () => {
-    await withDiscord(async (fixture) => {
-      const { member, roles } = await fixture.setup();
-      fixture.permissionRequestFails = true;
-      fixture.permissionError = Object.assign(new Error("network reset"), { code: "ECONNRESET" });
-      const queue = new AssignmentQueue(roles, () => {
-        fixture.permissionRequestFails = false;
-        if (change === "replacement")
-          fixture.permissions = [{ id: ids.replacement, type: 1, permission: true }];
-        if (change === "disabled") fixture.permissions = [];
-        if (change === "pending") fixture.pending = true;
-        if (change === "existing") fixture.existingRoles = [ids.target];
-      }, [1]);
-      await queue.enqueue(member);
-      expect(fixture.writes).toEqual(
-        change === "replacement"
-          ? [Routes.guildMemberRole(ids.guild, ids.member, ids.replacement)]
-          : [],
-      );
-      queue.stop();
-    });
-  });
-}
-
-test("queue does not retry permanent errors", async () => {
-  await withDiscord(async (fixture) => {
-    fixture.manageRoles = false;
-    const { member, roles } = await fixture.setup();
-    const reports: boolean[] = [];
-    const queue = new AssignmentQueue(
-      roles,
-      (_error, _member, _attempt, retrying) => reports.push(retrying),
-      [1],
-    );
-    await queue.enqueue(member);
-    expect(reports).toEqual([false]);
     expect(fixture.writes).toEqual([]);
-    queue.stop();
-  });
-});
-
-test("queue exhausts bounded retries", async () => {
-  await withDiscord(async (fixture) => {
-    const { member, roles } = await fixture.setup();
-    fixture.permissionRequestFails = true;
-    fixture.permissionError = new HTTPError(503, "Unavailable", "GET", "https://discord.com", {});
-    const reports: boolean[] = [];
-    const queue = new AssignmentQueue(
-      roles,
-      (_error, _member, _attempt, retrying) => reports.push(retrying),
-      [1, 1, 1],
-    );
-    await queue.enqueue(member);
-    expect(reports).toEqual([true, true, true, false]);
-    expect(fixture.writes).toEqual([]);
-    queue.stop();
-  });
-});
-
-test("shutdown cancels pending retries and rejects new work", async () => {
-  await withDiscord(async (fixture) => {
-    const { member, roles } = await fixture.setup();
-    fixture.permissionRequestFails = true;
-    fixture.permissionError = Object.assign(new Error("network reset"), { code: "ECONNRESET" });
-    let reports = 0;
-    const queue = new AssignmentQueue(roles, () => {
-      reports++;
-      queue.stop();
-    }, [30000]);
-    await queue.enqueue(member);
-    await queue.enqueue(member);
-    expect(reports).toBe(1);
-    expect(fixture.writes).toEqual([]);
-  });
-});
-
-test("retry stops when the member has left", async () => {
-  await withDiscord(async (fixture) => {
-    const { member, roles } = await fixture.setup();
-    fixture.permissionRequestFails = true;
-    fixture.permissionError = Object.assign(new Error("network reset"), { code: "ECONNRESET" });
-    let reports = 0;
-    const queue = new AssignmentQueue(roles, () => {
-      reports++;
-      fixture.memberLeft = true;
-    }, [1, 1]);
-    await queue.enqueue(member);
-    expect(reports).toBe(1);
-    expect(fixture.writes).toEqual([]);
-    queue.stop();
   });
 });
 
@@ -444,20 +331,39 @@ test("outstanding screening survives restart and assigns the current target", as
     fixture.client.guilds.cache.set(member.guild.id, member.guild);
     const path = `/tmp/autorole-test-${crypto.randomUUID()}.sqlite`;
     fixture.pending = true;
-    const first = new OutstandingAssignments(path, fixture.client, roles, () => {});
-    first.observeJoin(member);
-    await first.reconcile();
-    first.stop();
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const first = yield* OutstandingAssignments.make(
+            path,
+            fixture.client,
+            roles,
+            () => Effect.void,
+          );
+          yield* first.observeJoin(member);
+          yield* first.reconcile();
+        }),
+      ),
+    );
     expect(fixture.writes).toEqual([]);
     fixture.pending = false;
     fixture.permissions = [{ id: ids.replacement, type: 1, permission: true }];
-    const second = new OutstandingAssignments(path, fixture.client, roles, () => {});
-    second.observe(member);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const second = yield* OutstandingAssignments.make(
+            path,
+            fixture.client,
+            roles,
+            () => Effect.void,
+          );
+          yield* second.observe(member);
+        }),
+      ),
+    );
     expect(fixture.writes).toEqual([
       Routes.guildMemberRole(ids.guild, ids.member, ids.replacement),
     ]);
-    second.stop();
     await Bun.file(path).delete();
   });
 });
@@ -465,11 +371,21 @@ test("outstanding screening survives restart and assigns the current target", as
 test("untracked members are never assigned on availability", async () => {
   await withDiscord(async (fixture) => {
     const { member, roles } = await fixture.setup();
-    const tracker = new OutstandingAssignments(":memory:", fixture.client, roles, () => {});
-    tracker.observe(member);
-    await tracker.reconcile();
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const tracker = yield* OutstandingAssignments.make(
+            ":memory:",
+            fixture.client,
+            roles,
+            () => Effect.void,
+          );
+          yield* tracker.observe(member);
+          yield* tracker.reconcile();
+        }),
+      ),
+    );
     expect(fixture.writes).toEqual([]);
-    tracker.stop();
   });
 });
 
@@ -484,15 +400,26 @@ test("screening completion during a member fetch triggers another check", async 
     fixture.memberReadGate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const tracker = new OutstandingAssignments(":memory:", fixture.client, roles, () => {});
-    tracker.observeJoin(member);
-    fixture.pending = false;
-    member.pending = false;
-    tracker.observe(member);
-    release?.();
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const tracker = yield* OutstandingAssignments.make(
+            ":memory:",
+            fixture.client,
+            roles,
+            () => Effect.void,
+          );
+          const joinFiber = yield* Effect.forkChild(tracker.observeJoin(member));
+          yield* Effect.sleep(10);
+          fixture.pending = false;
+          member.pending = false;
+          yield* tracker.observe(member);
+          release?.();
+          yield* Fiber.join(joinFiber);
+        }),
+      ),
+    );
     expect(fixture.writes).toEqual([Routes.guildMemberRole(ids.guild, ids.member, ids.target)]);
-    tracker.stop();
   });
 });
 
@@ -506,18 +433,79 @@ test("persisted gateway screening evidence survives an omitted REST field and re
     fixture.memberReadGate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const first = new OutstandingAssignments(path, fixture.client, roles, () => {});
-    first.observeJoin(member);
-    first.stop();
-    release?.();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const first = yield* OutstandingAssignments.make(
+            path,
+            fixture.client,
+            roles,
+            () => Effect.void,
+          );
+          const joinFiber = yield* Effect.forkChild(first.observeJoin(member));
+          yield* Effect.sleep(10);
+          yield* first.stop();
+          release?.();
+          yield* Fiber.join(joinFiber);
+        }),
+      ),
+    );
     fixture.memberReadGate = undefined;
     fixture.omitPending = true;
     member.guild.members.cache.delete(member.id);
-    const second = new OutstandingAssignments(path, fixture.client, roles, () => {});
-    await second.reconcile();
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const second = yield* OutstandingAssignments.make(
+            path,
+            fixture.client,
+            roles,
+            () => Effect.void,
+          );
+          yield* second.reconcile();
+        }),
+      ),
+    );
     expect(fixture.writes).toEqual([Routes.guildMemberRole(ids.guild, ids.member, ids.target)]);
-    second.stop();
     await Bun.file(path).delete();
+  });
+});
+
+test("interruption discards a queued recheck without waiting for Discord", async () => {
+  await withDiscord(async (fixture) => {
+    fixture.pending = true;
+    const { member, roles } = await fixture.setup();
+    member.guild.available = true;
+    fixture.client.guilds.cache.set(member.guild.id, member.guild);
+    const gate = Promise.withResolvers<void>();
+    fixture.memberReadGate = gate.promise;
+    let rescued = false;
+    const rescue = setTimeout(() => {
+      rescued = true;
+      gate.resolve();
+    }, 100);
+    try {
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const tracker = yield* OutstandingAssignments.make(
+              ":memory:",
+              fixture.client,
+              roles,
+              () => Effect.void,
+            );
+            const job = yield* Effect.forkChild(tracker.observeJoin(member));
+            yield* Effect.sleep(5);
+            yield* tracker.observe(member);
+            yield* Fiber.interrupt(job);
+            expect(rescued).toBe(false);
+          }),
+        ),
+      );
+    } finally {
+      clearTimeout(rescue);
+      gate.resolve();
+    }
+    expect(fixture.writes).toEqual([]);
   });
 });

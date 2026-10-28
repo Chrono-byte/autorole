@@ -13,10 +13,11 @@ function writeLog(level: keyof typeof PRIORITY, event: string, fields: LogFields
   else process.stdout.write(line);
 }
 
-export function logError(event: string, fields: LogFields) {
-  writeLog("error", event, fields);
+export function logError(event: string, fields: LogFields): Effect.Effect<void> {
+  return Effect.sync(() => writeLog("error", event, fields));
 }
 
-export function logInfo(event: string, fields: LogFields) {
-  writeLog("info", event, fields);
+export function logInfo(event: string, fields: LogFields): Effect.Effect<void> {
+  return Effect.sync(() => writeLog("info", event, fields));
 }
+import { Effect } from "effect";

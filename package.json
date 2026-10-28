@@ -20,15 +20,16 @@
     "deploy:artifact": "bash scripts/deploy-artifact.sh"
   },
   "dependencies": {
-    "discord.js": "^14.27.0"
+    "discord.js": "^14.27.0",
+    "effect": "^4.0.7"
   },
   "devDependencies": {
     "@stylistic/eslint-plugin": "^5.10.0",
-    "@types/bun": "latest",
-    "oxfmt": "^0.72.0",
-    "oxlint": "^1.87.0"
+    "@types/bun": "^1.4.4",
+    "oxfmt": "^0.75.0",
+    "oxlint": "^1.90.0"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^7.0.2"
   }
 }

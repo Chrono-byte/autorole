@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { REST, Routes } from "discord.js";
+import { Effect } from "effect";
 import { CommandCleaner } from "../src/cli/clean-commands";
 import { readConfiguration } from "../src/config/Configuration";
 
@@ -16,26 +17,32 @@ const commands = [
 
 for (const scope of ["guild", "global"]) {
   test(`cleanup removes only obsolete slash commands in ${scope} scope`, async () => {
-    const config = readConfiguration({
-      DISCORD_TOKEN: "fixture",
-      DISCORD_APPLICATION_ID: applicationId,
-      DISCORD_GUILD_ID: guildId,
-    });
+    const config = Effect.runSync(
+      readConfiguration({
+        DISCORD_TOKEN: "fixture",
+        DISCORD_APPLICATION_ID: applicationId,
+        DISCORD_GUILD_ID: guildId,
+      }),
+    );
     const rest = new REST();
     const get = spyOn(rest, "get").mockResolvedValue(commands);
     const remove = spyOn(rest, "delete").mockResolvedValue(undefined);
     try {
-      await new CommandCleaner(config, rest).clean(scope === "guild" ? "guild" : "global");
+      await Effect.runPromise(
+        new CommandCleaner(config, rest).clean(scope === "guild" ? "guild" : "global"),
+      );
       expect(get).toHaveBeenCalledWith(
         scope === "guild"
           ? Routes.applicationGuildCommands(applicationId, guildId)
           : Routes.applicationCommands(applicationId),
+        { signal: expect.any(AbortSignal) },
       );
       expect(remove).toHaveBeenCalledTimes(1);
       expect(remove).toHaveBeenCalledWith(
         scope === "guild"
           ? Routes.applicationGuildCommand(applicationId, guildId, staleId)
           : Routes.applicationCommand(applicationId, staleId),
+        { signal: expect.any(AbortSignal) },
       );
     } finally {
       get.mockRestore();
@@ -45,17 +52,19 @@ for (const scope of ["guild", "global"]) {
 }
 
 test("cleanup validates the whole list before deleting anything", async () => {
-  const config = readConfiguration({
-    DISCORD_TOKEN: "fixture",
-    DISCORD_APPLICATION_ID: applicationId,
-  });
+  const config = Effect.runSync(
+    readConfiguration({
+      DISCORD_TOKEN: "fixture",
+      DISCORD_APPLICATION_ID: applicationId,
+    }),
+  );
   const rest = new REST();
   const get = spyOn(rest, "get").mockResolvedValue([commands[2], { name: "broken" }]);
   const remove = spyOn(rest, "delete").mockResolvedValue(undefined);
   try {
-    await expect(new CommandCleaner(config, rest).clean("global")).rejects.toThrow(
-      "invalid command",
-    );
+    await expect(
+      Effect.runPromise(new CommandCleaner(config, rest).clean("global")),
+    ).rejects.toThrow("invalid command");
     expect(remove).not.toHaveBeenCalled();
   } finally {
     get.mockRestore();
@@ -64,16 +73,18 @@ test("cleanup validates the whole list before deleting anything", async () => {
 });
 
 test("guild cleanup without a guild ID fails before contacting Discord", async () => {
-  const config = readConfiguration({
-    DISCORD_TOKEN: "fixture",
-    DISCORD_APPLICATION_ID: applicationId,
-  });
+  const config = Effect.runSync(
+    readConfiguration({
+      DISCORD_TOKEN: "fixture",
+      DISCORD_APPLICATION_ID: applicationId,
+    }),
+  );
   const rest = new REST();
   const get = spyOn(rest, "get").mockResolvedValue(commands);
   try {
-    await expect(new CommandCleaner(config, rest).clean("guild")).rejects.toThrow(
-      "DISCORD_GUILD_ID",
-    );
+    await expect(
+      Effect.runPromise(new CommandCleaner(config, rest).clean("guild")),
+    ).rejects.toThrow("DISCORD_GUILD_ID");
     expect(get).not.toHaveBeenCalled();
   } finally {
     get.mockRestore();

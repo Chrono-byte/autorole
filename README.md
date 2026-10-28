@@ -1,6 +1,6 @@
 # Autorole
 
-A Discord bot built with Bun, TypeScript, and discord.js. Assigns a selected role to new human members after membership screening.
+A Discord bot built with Bun, TypeScript, Effect, and discord.js. Assigns a selected role to new human members after membership screening.
 
 ## Setup
 

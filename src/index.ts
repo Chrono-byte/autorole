@@ -1,10 +1,11 @@
+import { Effect } from "effect";
 import { AutoroleBot } from "./bot/AutoroleBot";
 import { readConfiguration } from "./config/Configuration";
-const bot = new AutoroleBot(readConfiguration());
-process.once("SIGINT", () => {
-  void bot.stop().then(() => process.exit(0));
+import { runMain } from "./runMain";
+
+const program = Effect.gen(function* () {
+  const configuration = yield* readConfiguration();
+  yield* new AutoroleBot(configuration).run();
 });
-process.once("SIGTERM", () => {
-  void bot.stop().then(() => process.exit(0));
-});
-await bot.start();
+
+await runMain(program, "autorole_start_failed");
