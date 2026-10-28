@@ -13,11 +13,15 @@ export class RoleService {
       throw new Error("Move the bot's highest role above the selected role.");
   }
 
-  async assign(member: GuildMember) {
-    if (member.user.bot || member.pending) return;
+  async assign(member: GuildMember, screeningComplete = false) {
+    if (member.user.bot) return "complete";
+    if (member.pending === true || (member.pending === null && !screeningComplete))
+      return "pending";
     const role = await this.getConfiguredRole(member.guild);
-    if (!role || member.roles.cache.has(role.id)) return;
+    if (!role) return "disabled";
+    if (member.roles.cache.has(role.id)) return "complete";
     await member.roles.add(role, "Automatic role after membership screening");
+    return "complete";
   }
 
   async getConfiguredRole(guild: Guild) {

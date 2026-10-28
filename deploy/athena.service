@@ -6,6 +6,7 @@ Type=notify
 NotifyAccess=all
 TimeoutStartSec=60
 WorkingDirectory=/var/lib/athena
+StateDirectory=athena-state
 EnvironmentFile=/var/lib/athena/runtime.env
 ExecStart=/var/lib/athena/current
 Restart=on-failure

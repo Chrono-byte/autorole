@@ -9,6 +9,7 @@ import {
   Routes,
   type ApplicationCommandPermissions,
 } from "discord.js";
+import { OutstandingAssignments } from "../src/bot/OutstandingAssignments";
 import { AssignmentQueue } from "../src/bot/AssignmentQueue";
 import { readConfiguration } from "../src/config/Configuration";
 import { IntegrationSettings } from "../src/config/IntegrationSettings";
@@ -36,6 +37,8 @@ class DiscordFixture {
   manageRoles = true;
   targetPosition = 1;
   pending = false;
+  omitPending = false;
+  memberReadGate: Promise<void> | undefined;
   bot = false;
   existingRoles: string[] = [];
   readonly writes: string[] = [];
@@ -44,6 +47,7 @@ class DiscordFixture {
       return {
         id: ids.guild,
         name: "Test server",
+        unavailable: false,
         owner_id: "100000000000000099",
         features: [],
         roles: [
@@ -96,6 +100,8 @@ class DiscordFixture {
       ];
     }
     if (route === Routes.guildMember(ids.guild, ids.member)) {
+      const capturedPending = this.pending;
+      await this.memberReadGate;
       if (this.memberLeft)
         throw new DiscordAPIError(
           { message: "Unknown Member", code: 10007 },
@@ -114,7 +120,7 @@ class DiscordFixture {
           bot: this.bot,
         },
         roles: this.existingRoles,
-        pending: this.pending,
+        ...(this.omitPending ? {} : { pending: capturedPending }),
         joined_at: "2026-01-01T00:00:00.000Z",
       };
     }
@@ -428,5 +434,90 @@ test("retry stops when the member has left", async () => {
     expect(reports).toBe(1);
     expect(fixture.writes).toEqual([]);
     queue.stop();
+  });
+});
+
+test("outstanding screening survives restart and assigns the current target", async () => {
+  await withDiscord(async (fixture) => {
+    const { member, roles } = await fixture.setup();
+    member.guild.available = true;
+    fixture.client.guilds.cache.set(member.guild.id, member.guild);
+    const path = `/tmp/autorole-test-${crypto.randomUUID()}.sqlite`;
+    fixture.pending = true;
+    const first = new OutstandingAssignments(path, fixture.client, roles, () => {});
+    first.observeJoin(member);
+    await first.reconcile();
+    first.stop();
+    expect(fixture.writes).toEqual([]);
+    fixture.pending = false;
+    fixture.permissions = [{ id: ids.replacement, type: 1, permission: true }];
+    const second = new OutstandingAssignments(path, fixture.client, roles, () => {});
+    second.observe(member);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fixture.writes).toEqual([
+      Routes.guildMemberRole(ids.guild, ids.member, ids.replacement),
+    ]);
+    second.stop();
+    await Bun.file(path).delete();
+  });
+});
+
+test("untracked members are never assigned on availability", async () => {
+  await withDiscord(async (fixture) => {
+    const { member, roles } = await fixture.setup();
+    const tracker = new OutstandingAssignments(":memory:", fixture.client, roles, () => {});
+    tracker.observe(member);
+    await tracker.reconcile();
+    expect(fixture.writes).toEqual([]);
+    tracker.stop();
+  });
+});
+
+test("screening completion during a member fetch triggers another check", async () => {
+  await withDiscord(async (fixture) => {
+    fixture.pending = true;
+    const { member, roles } = await fixture.setup();
+    member.guild.available = true;
+    fixture.client.guilds.cache.set(member.guild.id, member.guild);
+    let release: (() => void) | undefined;
+    fixture.pending = true;
+    fixture.memberReadGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tracker = new OutstandingAssignments(":memory:", fixture.client, roles, () => {});
+    tracker.observeJoin(member);
+    fixture.pending = false;
+    member.pending = false;
+    tracker.observe(member);
+    release?.();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(fixture.writes).toEqual([Routes.guildMemberRole(ids.guild, ids.member, ids.target)]);
+    tracker.stop();
+  });
+});
+
+test("persisted gateway screening evidence survives an omitted REST field and restart", async () => {
+  await withDiscord(async (fixture) => {
+    const { member, roles } = await fixture.setup();
+    member.guild.available = true;
+    fixture.client.guilds.cache.set(member.guild.id, member.guild);
+    const path = `/tmp/autorole-evidence-${crypto.randomUUID()}.sqlite`;
+    let release: (() => void) | undefined;
+    fixture.memberReadGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const first = new OutstandingAssignments(path, fixture.client, roles, () => {});
+    first.observeJoin(member);
+    first.stop();
+    release?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.memberReadGate = undefined;
+    fixture.omitPending = true;
+    member.guild.members.cache.delete(member.id);
+    const second = new OutstandingAssignments(path, fixture.client, roles, () => {});
+    await second.reconcile();
+    expect(fixture.writes).toEqual([Routes.guildMemberRole(ids.guild, ids.member, ids.target)]);
+    second.stop();
+    await Bun.file(path).delete();
   });
 });

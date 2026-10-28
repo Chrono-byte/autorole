@@ -4,7 +4,7 @@ import { IntegrationSettings } from "../config/IntegrationSettings";
 import { RoleService } from "./RoleService";
 import { AutoroleCommands } from "./AutoroleCommands";
 
-import { AssignmentQueue } from "./AssignmentQueue";
+import { OutstandingAssignments } from "./OutstandingAssignments";
 import { notifyReady } from "./notifyReady";
 
 const overwatchStatuses = [
@@ -19,7 +19,7 @@ const overwatchStatuses = [
 
 export class AutoroleBot {
   private presenceTimer: ReturnType<typeof setInterval> | undefined;
-  private readonly assignments: AssignmentQueue;
+  private readonly assignments: OutstandingAssignments;
   private readonly client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
   });
@@ -28,12 +28,22 @@ export class AutoroleBot {
     const settings = new IntegrationSettings(configuration.guildId);
     const roles = new RoleService(settings);
     const commands = new AutoroleCommands(roles);
-    this.assignments = new AssignmentQueue(roles, (error, member, attempt, retrying) => {
-      process.stderr.write(
-        `${JSON.stringify({ event: "autorole_assignment_error", guildId: member.guild.id, memberId: member.id, attempt, retrying, code: error instanceof DiscordAPIError ? error.code : error instanceof Error && "code" in error ? error.code : undefined, message: error instanceof Error ? error.message : "Unknown error" })}\n`,
-      );
-    });
+    this.assignments = new OutstandingAssignments(
+      process.env.AUTOROLE_STATE_PATH ||
+        (process.env.STATE_DIRECTORY
+          ? `${process.env.STATE_DIRECTORY}/assignments.sqlite`
+          : "./data/assignments.sqlite"),
+      this.client,
+      roles,
+      (error, guildId, memberId) => {
+        process.stderr.write(
+          `${JSON.stringify({ event: "autorole_assignment_error", guildId, memberId, code: error instanceof DiscordAPIError ? error.code : undefined, message: error instanceof Error ? error.message : "Unknown error" })}\n`,
+        );
+      },
+      configuration.guildId,
+    );
     this.client.once(Events.ClientReady, (client) => {
+      this.assignments.start();
       let statusIndex = 0;
       const updatePresence = () => {
         client.user.setPresence({
@@ -59,10 +69,13 @@ export class AutoroleBot {
       });
     });
     this.client.on(Events.GuildMemberAdd, (member) => {
-      void this.assignments.enqueue(member);
+      this.assignments.observeJoin(member);
     });
     this.client.on(Events.GuildMemberUpdate, (before, member) => {
-      if (before.pending && !member.pending) void this.assignments.enqueue(member);
+      if (before.pending && !member.pending) this.assignments.observe(member);
+    });
+    this.client.on(Events.GuildMemberAvailable, (member) => {
+      this.assignments.observe(member);
     });
     this.client.on(Events.InteractionCreate, (interaction) => {
       if (!interaction.isChatInputCommand()) return;
