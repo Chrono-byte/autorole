@@ -10,10 +10,18 @@ import { notifyReady } from "./notifyReady";
 const overwatchStatuses = [
   "Escorting the payload",
   "Contesting the point",
-  "Waiting for the team to group up",
+  "Cheers, love! The cavalry's here!",
+  "It's high noon.",
+  "Ryūjin no ken wo kurae!",
+  "Justice rains from above!",
+  "火をつけろ！",
+  "D.Va: 1, Bad guys: 0.",
   "Heroes never die!",
   "Nerf this!",
   "The world could always use more heroes",
+  "Would you like to see my muscles?",
+  "Propaganda is useless.",
+  "Boop!",
   "egg",
 ] satisfies [string, ...string[]];
 

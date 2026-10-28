@@ -9,6 +9,10 @@ import {
 } from "discord.js";
 import { RoleService } from "./RoleService";
 
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const PENDING_RETRY_DELAY_MS = 5 * MINUTE_MS;
+
 type Entry = {
   guildId: string;
   memberId: string;
@@ -46,7 +50,7 @@ export class OutstandingAssignments {
 
   start() {
     void this.reconcile();
-    this.timer = setInterval(() => void this.reconcile(), 60_000);
+    this.timer = setInterval(() => void this.reconcile(), MINUTE_MS);
     this.timer.unref();
   }
 
@@ -119,7 +123,7 @@ export class OutstandingAssignments {
       if (!latest || latest.joinedAt !== entry.joinedAt) return;
       const result = await this.roles.assign(member, latest.screeningComplete === 1);
       if (result === "complete") this.remove(entry);
-      else this.defer(entry, result === "pending" ? 5 * 60_000 : undefined);
+      else this.defer(entry, result === "pending" ? PENDING_RETRY_DELAY_MS : undefined);
     } catch (error) {
       if (this.stopped) return;
       if (error instanceof DiscordAPIError && error.code === 10007) this.remove(entry);
@@ -146,7 +150,7 @@ export class OutstandingAssignments {
 
   private defer(
     entry: Entry,
-    delay = Math.min(60 * 60_000, 60_000 * 2 ** Math.min(entry.attempts, 6)),
+    delay = Math.min(HOUR_MS, MINUTE_MS * 2 ** Math.min(entry.attempts, 6)),
   ) {
     this.db.run(
       "UPDATE assignments SET attempts = attempts + 1, nextAttempt = ? WHERE guildId = ? AND memberId = ? AND joinedAt = ?",
