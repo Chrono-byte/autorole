@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import { fileURLToPath } from "node:url";
 import { readConfiguration, type Configuration } from "../config/Configuration";
 import { tryPromise, trySync } from "../effectful";
+import { discordRequest } from "../errors";
 import { runMain } from "../runMain";
 import { runCommand } from "../runCommand";
 
@@ -22,14 +23,16 @@ class BotAvatarUpdater {
       if (!bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))
         return yield* Effect.fail(new Error("The avatar must be a PNG image."));
       const padded = yield* this.pad(bytes);
-      const updated = yield* tryPromise((signal) =>
+      const updated = yield* discordRequest((signal) =>
         this.rest.patch(Routes.user("@me"), {
           signal,
           body: { avatar: `data:image/png;base64,${padded.toString("base64")}` },
         }),
       );
       const avatar = yield* trySync(() => BotAvatarUpdater.avatarHash(updated));
-      const verified = yield* tryPromise((signal) => this.rest.get(Routes.user("@me"), { signal }));
+      const verified = yield* discordRequest((signal) =>
+        this.rest.get(Routes.user("@me"), { signal }),
+      );
       const verifiedAvatar = yield* trySync(() => BotAvatarUpdater.avatarHash(verified));
       if (verifiedAvatar !== avatar)
         return yield* Effect.fail(new Error("Discord's avatar did not match the update."));

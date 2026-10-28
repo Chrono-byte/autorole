@@ -1,29 +1,14 @@
-import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-import {
-  DiscordAPIError,
-  type Client,
-  type GuildMember,
-  type PartialGuildMember,
-} from "discord.js";
-import { Effect, Result, Schedule } from "effect";
-import { tryPromise, trySync } from "../effectful";
+import { type Client, type GuildMember, type PartialGuildMember } from "discord.js";
+import { DateTime, Effect, Schedule } from "effect";
+import { ConfigurationError, DiscordRequestError, StorageError, discordRequest } from "../errors";
 import { logError } from "../logger";
+import { AssignmentStore, type Assignment } from "../storage/AssignmentStore";
 import { RoleService } from "./RoleService";
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
-const PENDING_RETRY_DELAY_MS = 5 * MINUTE_MS;
-
-type Entry = {
-  guildId: string;
-  memberId: string;
-  joinedAt: number;
-  attempts: number;
-  nextAttempt: number;
-  screeningComplete: number;
-};
+const SCREENING_RECHECK_MS = 5 * MINUTE_MS;
+const CONFIGURATION_RECHECK_MS = 5 * MINUTE_MS;
 
 export class OutstandingAssignments {
   private readonly active = new Set<string>();
@@ -31,7 +16,7 @@ export class OutstandingAssignments {
   private stopped = false;
 
   private constructor(
-    private readonly db: Database,
+    private readonly store: AssignmentStore,
     private readonly client: Client,
     private readonly roles: RoleService,
     private readonly report: (
@@ -42,117 +27,87 @@ export class OutstandingAssignments {
     private readonly guildId?: string,
   ) {}
 
-  static make(
+  static make = Effect.fn("OutstandingAssignments.make")(function* (
     path: string,
     client: Client,
     roles: RoleService,
     report: (error: unknown, guildId: string, memberId: string) => Effect.Effect<void>,
     guildId?: string,
   ) {
-    return Effect.gen(function* () {
-      const db = yield* Effect.acquireRelease(
-        trySync(() => {
-          if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-          const database = new Database(path, { create: true });
-          try {
-            database.run(
-              "CREATE TABLE IF NOT EXISTS assignments (guildId TEXT NOT NULL, memberId TEXT NOT NULL, joinedAt INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, nextAttempt INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (guildId, memberId))",
-            );
-            const columns = database
-              .query<{ name: string }, []>("PRAGMA table_info(assignments)")
-              .all();
-            if (!columns.some((column) => column.name === "screeningComplete"))
-              database.run(
-                "ALTER TABLE assignments ADD COLUMN screeningComplete INTEGER NOT NULL DEFAULT 0",
-              );
-            return database;
-          } catch (error) {
-            database.close();
-            throw error;
-          }
-        }),
-        (database) => Effect.sync(() => database.close()),
-      );
-      return yield* Effect.acquireRelease(
-        Effect.sync(() => new OutstandingAssignments(db, client, roles, report, guildId)),
-        (assignments) => assignments.stop(),
-      );
-    });
-  }
+    const store = yield* AssignmentStore.make(path);
+    return yield* Effect.acquireRelease(
+      Effect.sync(() => new OutstandingAssignments(store, client, roles, report, guildId)),
+      (assignments) => assignments.stop(),
+    );
+  });
 
   start() {
     return Effect.suspend(() => this.reconcile()).pipe(
-      Effect.matchEffect({
-        onFailure: (error) => logError("autorole_reconcile_failed", { message: error.message }),
-        onSuccess: () => Effect.void,
-      }),
+      Effect.catchTag("StorageError", (error) =>
+        logError("autorole_reconcile_failed", {
+          operation: error.operation,
+          message: error.message,
+        }),
+      ),
       Effect.repeat(Schedule.spaced(MINUTE_MS)),
       Effect.asVoid,
     );
   }
 
-  observeJoin(member: GuildMember): Effect.Effect<void, Error> {
+  observeJoin = Effect.fn("OutstandingAssignments.observeJoin")(function* (
+    this: OutstandingAssignments,
+    member: GuildMember,
+  ) {
     if (this.stopped || member.user.bot || (this.guildId && this.guildId !== member.guild.id))
-      return Effect.void;
-    if (member.joinedTimestamp === null)
-      return this.report(new Error("Join event has no join timestamp"), member.guild.id, member.id);
-    const db = this.db;
-    return trySync(() =>
-      db.run(
-        "INSERT INTO assignments (guildId, memberId, joinedAt, screeningComplete) VALUES (?, ?, ?, ?) ON CONFLICT (guildId, memberId) DO UPDATE SET joinedAt = excluded.joinedAt, screeningComplete = excluded.screeningComplete, attempts = 0, nextAttempt = 0",
-        [member.guild.id, member.id, member.joinedTimestamp, member.pending === false ? 1 : 0],
-      ),
-    ).pipe(Effect.andThen(this.observe(member)));
-  }
-
-  observe(member: GuildMember | PartialGuildMember): Effect.Effect<void, Error> {
-    return Effect.gen({ self: this }, function* () {
-      const entry = yield* this.get(member.guild.id, member.id);
-      if (!entry || this.stopped) return;
-      if (member.pending === false && member.joinedTimestamp === entry.joinedAt) {
-        yield* trySync(() =>
-          this.db.run(
-            "UPDATE assignments SET screeningComplete = 1 WHERE guildId = ? AND memberId = ? AND joinedAt = ?",
-            [entry.guildId, entry.memberId, entry.joinedAt],
-          ),
-        );
-      }
-      yield* this.process(entry, true);
-    });
-  }
-
-  reconcile(): Effect.Effect<void, Error> {
-    return Effect.gen({ self: this }, function* () {
-      if (this.stopped) return;
-      const entries = yield* trySync(() =>
-        this.db
-          .query<Entry, [number]>("SELECT * FROM assignments WHERE nextAttempt <= ?")
-          .all(Date.now()),
+      return;
+    if (member.joinedTimestamp === null) {
+      yield* this.report(
+        new ConfigurationError({ message: "Join event has no join timestamp" }),
+        member.guild.id,
+        member.id,
       );
-      for (const entry of entries) {
-        if (this.stopped) break;
-        yield* this.process(entry);
-      }
+      return;
+    }
+    yield* this.store.recordJoin({
+      guildId: member.guild.id,
+      memberId: member.id,
+      joinedAt: member.joinedTimestamp,
+      screeningComplete: member.pending === false ? 1 : 0,
     });
-  }
+    yield* this.observe(member);
+  });
 
-  stop(): Effect.Effect<void> {
+  observe = Effect.fn("OutstandingAssignments.observe")(function* (
+    this: OutstandingAssignments,
+    member: GuildMember | PartialGuildMember,
+  ): Effect.fn.Return<void, StorageError> {
+    if (this.stopped) return;
+    const entry = yield* this.store.get(member.guild.id, member.id);
+    if (!entry) return;
+    if (member.pending === false && member.joinedTimestamp === entry.joinedAt)
+      yield* this.store.completeScreening(entry);
+    yield* this.process(entry, true);
+  });
+
+  reconcile = Effect.fn("OutstandingAssignments.reconcile")(function* (
+    this: OutstandingAssignments,
+  ): Effect.fn.Return<void, StorageError> {
+    if (this.stopped) return;
+    const now = DateTime.toEpochMillis(yield* DateTime.now);
+    const entries = yield* this.store.due(now);
+    for (const entry of entries) {
+      if (this.stopped) break;
+      yield* this.process(entry);
+    }
+  });
+
+  stop() {
     return Effect.sync(() => {
       this.stopped = true;
     });
   }
 
-  private get(guildId: string, memberId: string): Effect.Effect<Entry | null, Error> {
-    return trySync(() =>
-      this.db
-        .query<Entry, [string, string]>(
-          "SELECT * FROM assignments WHERE guildId = ? AND memberId = ?",
-        )
-        .get(guildId, memberId),
-    );
-  }
-
-  private process(entry: Entry, observed = false): Effect.Effect<void, Error> {
+  private process(entry: Assignment, observed = false): Effect.Effect<void, StorageError> {
     const key = `${entry.guildId}:${entry.memberId}`;
     return Effect.gen({ self: this }, function* () {
       const acquired = yield* Effect.sync(() => {
@@ -168,33 +123,40 @@ export class OutstandingAssignments {
       const attempt = Effect.gen({ self: this }, function* () {
         const guild = this.client.guilds.cache.get(entry.guildId);
         if (!guild || guild.available === false)
-          return yield* Effect.fail(new Error("Guild is unavailable"));
-        const member = yield* tryPromise(() =>
+          return yield* new DiscordRequestError({
+            message: "Guild is unavailable",
+            cause: new Error("Guild is unavailable"),
+            retryable: true,
+          });
+        const member = yield* discordRequest(() =>
           guild.members.fetch({ user: entry.memberId, force: true }),
         );
         if (this.stopped) return;
         if (member.joinedTimestamp !== entry.joinedAt) {
-          yield* this.remove(entry);
+          yield* this.store.remove(entry);
           return;
         }
-        const latest = yield* this.get(entry.guildId, entry.memberId);
+        const latest = yield* this.store.get(entry.guildId, entry.memberId);
         if (!latest || latest.joinedAt !== entry.joinedAt) return;
         const result = yield* this.roles.assign(member, latest.screeningComplete === 1);
-        if (result === "complete") yield* this.remove(entry);
-        else yield* this.defer(entry, result === "pending" ? PENDING_RETRY_DELAY_MS : undefined);
+        if (result === "complete") yield* this.store.remove(entry);
+        else
+          yield* this.defer(
+            entry,
+            result === "pending" ? SCREENING_RECHECK_MS : CONFIGURATION_RECHECK_MS,
+          );
       });
-      const runAttempt = Effect.gen({ self: this }, function* () {
-        const result = yield* Effect.result(attempt);
-        if (Result.isFailure(result)) {
-          if (this.stopped) return;
-          if (result.failure instanceof DiscordAPIError && result.failure.code === 10007) {
-            yield* this.remove(entry);
-            return;
-          }
-          yield* this.report(result.failure, entry.guildId, entry.memberId);
-          yield* this.defer(entry);
-        }
-      });
+      const runAttempt = attempt.pipe(
+        Effect.catchTag("ConfigurationError", (error) =>
+          this.retry(entry, error, CONFIGURATION_RECHECK_MS),
+        ),
+        Effect.catchTag("DiscordRequestError", (error) => {
+          if (this.stopped) return Effect.void;
+          if (error.code === 10007) return this.store.remove(entry);
+          // Permission failures can recover after an administrator changes settings.
+          return this.retry(entry, error, error.retryable ? undefined : CONFIGURATION_RECHECK_MS);
+        }),
+      );
       let recheck = false;
       yield* runAttempt.pipe(
         Effect.ensuring(
@@ -204,33 +166,31 @@ export class OutstandingAssignments {
           }),
         ),
       );
-      // Further Discord work must stay interruptible; finalizers only release state.
+      // Further Discord work stays interruptible; finalizers only release state.
       if (recheck && !this.stopped) {
-        const latest = yield* this.get(entry.guildId, entry.memberId);
+        const latest = yield* this.store.get(entry.guildId, entry.memberId);
         if (latest) yield* this.process(latest);
       }
     });
   }
 
-  private remove(entry: Entry): Effect.Effect<void, Error> {
-    return trySync(() =>
-      this.db.run("DELETE FROM assignments WHERE guildId = ? AND memberId = ? AND joinedAt = ?", [
-        entry.guildId,
-        entry.memberId,
-        entry.joinedAt,
-      ]),
-    ).pipe(Effect.asVoid);
+  private retry(
+    entry: Assignment,
+    error: ConfigurationError | DiscordRequestError,
+    delay?: number,
+  ) {
+    if (this.stopped) return Effect.void;
+    return this.report(error, entry.guildId, entry.memberId).pipe(
+      Effect.andThen(this.defer(entry, delay)),
+    );
   }
 
   private defer(
-    entry: Entry,
+    entry: Assignment,
     delay = Math.min(HOUR_MS, MINUTE_MS * 2 ** Math.min(entry.attempts, 6)),
-  ): Effect.Effect<void, Error> {
-    return trySync(() =>
-      this.db.run(
-        "UPDATE assignments SET attempts = attempts + 1, nextAttempt = ? WHERE guildId = ? AND memberId = ? AND joinedAt = ?",
-        [Date.now() + delay, entry.guildId, entry.memberId, entry.joinedAt],
-      ),
-    ).pipe(Effect.asVoid);
+  ) {
+    return DateTime.now.pipe(
+      Effect.flatMap((now) => this.store.defer(entry, DateTime.toEpochMillis(now) + delay)),
+    );
   }
 }

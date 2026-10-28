@@ -1,9 +1,20 @@
 import { ApplicationCommandType, REST, Routes } from "discord.js";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { AutoroleCommands } from "../bot/AutoroleCommands";
 import { readConfiguration, type Configuration } from "../config/Configuration";
-import { tryPromise, trySync } from "../effectful";
+import { trySync } from "../effectful";
+import { ConfigurationError, discordRequest } from "../errors";
 import { runMain } from "../runMain";
+
+const decodeCommands = Schema.decodeUnknownEffect(
+  Schema.Array(
+    Schema.Struct({
+      id: Schema.String.check(Schema.isPattern(/^\d{17,20}$/)),
+      name: Schema.String,
+      type: Schema.Number,
+    }),
+  ),
+);
 
 export class CommandCleaner {
   constructor(
@@ -14,16 +25,24 @@ export class CommandCleaner {
   clean(scope: "guild" | "global"): Effect.Effect<void, Error> {
     const guildId = scope === "guild" ? this.config.guildId : undefined;
     if (scope === "guild" && !guildId)
-      return Effect.fail(new Error("Set DISCORD_GUILD_ID to use --guild."));
+      return Effect.fail(
+        new ConfigurationError({ message: "Set DISCORD_GUILD_ID to use --guild." }),
+      );
     const route = guildId
       ? Routes.applicationGuildCommands(this.config.applicationId, guildId)
       : Routes.applicationCommands(this.config.applicationId);
     const rest = this.rest;
-    const parseCommands = this.parseCommands.bind(this);
     const configuration = this.config;
     return Effect.gen(function* () {
-      const data = yield* tryPromise((signal) => rest.get(route, { signal }));
-      const commands = yield* trySync(() => parseCommands(data));
+      const data = yield* discordRequest((signal) => rest.get(route, { signal }));
+      const commands = yield* decodeCommands(data).pipe(
+        Effect.mapError(
+          () =>
+            new ConfigurationError({
+              message: "Discord returned an invalid command list. No commands were removed.",
+            }),
+        ),
+      );
       const ours = new Set(AutoroleCommands.definitions.map((definition) => definition.name));
       const obsolete = commands.filter(
         (command) => command.type === ApplicationCommandType.ChatInput && !ours.has(command.name),
@@ -32,31 +51,12 @@ export class CommandCleaner {
         const deleteRoute = guildId
           ? Routes.applicationGuildCommand(configuration.applicationId, guildId, command.id)
           : Routes.applicationCommand(configuration.applicationId, command.id);
-        yield* tryPromise((signal) => rest.delete(deleteRoute, { signal }));
+        yield* discordRequest((signal) => rest.delete(deleteRoute, { signal }));
         yield* Effect.sync(() => process.stdout.write(`Removed /${command.name}\n`));
       }
       yield* Effect.sync(() =>
         process.stdout.write(`Removed ${obsolete.length} obsolete slash command(s).\n`),
       );
-    });
-  }
-
-  private parseCommands(data: unknown) {
-    if (!Array.isArray(data)) throw new Error("Discord returned an invalid command list.");
-    return data.map((entry: unknown) => {
-      if (
-        typeof entry !== "object" ||
-        entry === null ||
-        !("id" in entry) ||
-        typeof entry.id !== "string" ||
-        !/^\d{17,20}$/.test(entry.id) ||
-        !("name" in entry) ||
-        typeof entry.name !== "string" ||
-        !("type" in entry) ||
-        typeof entry.type !== "number"
-      )
-        throw new Error("Discord returned an invalid command. No commands were removed.");
-      return { id: entry.id, name: entry.name, type: entry.type };
     });
   }
 }
@@ -66,7 +66,9 @@ if (import.meta.main) {
   const flag = args[0];
   const program = Effect.gen(function* () {
     if (args.length !== 1 || (flag !== "--guild" && flag !== "--global"))
-      return yield* Effect.fail(new Error("Usage: bun run clean-commands --guild | --global"));
+      return yield* Effect.fail(
+        new ConfigurationError({ message: "Usage: bun run clean-commands --guild | --global" }),
+      );
     const configuration = yield* readConfiguration();
     const cleaner = yield* trySync(() => new CommandCleaner(configuration));
     yield* cleaner.clean(flag === "--guild" ? "guild" : "global");

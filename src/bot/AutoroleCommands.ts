@@ -7,7 +7,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { Effect, Result } from "effect";
-import { tryPromise } from "../effectful";
+import { discordRequest } from "../errors";
 import { logError } from "../logger";
 import { RoleService } from "./RoleService";
 
@@ -37,70 +37,72 @@ export class AutoroleCommands {
 
   constructor(private readonly roles: RoleService) {}
 
-  execute(interaction: ChatInputCommandInteraction): Effect.Effect<void, Error> {
-    return Effect.gen({ self: this }, function* () {
-      switch (interaction.commandName) {
-        case AutoroleCommands.statusDefinition.name:
-          yield* this.status(interaction);
-          break;
-        case AutoroleCommands.targetDefinition.name:
-          yield* tryPromise(() =>
-            interaction.reply({
-              flags: MessageFlags.Ephemeral,
-              content:
-                "This command marks the autorole configuration. A server administrator selects exactly one allowed role in Server Settings > Integrations > this bot > /autorole-target. Running this command does not assign or change any roles.",
-            }),
-          );
-          break;
-      }
-    });
-  }
+  execute = Effect.fn("AutoroleCommands.execute")(function* (
+    this: AutoroleCommands,
+    interaction: ChatInputCommandInteraction,
+  ) {
+    switch (interaction.commandName) {
+      case AutoroleCommands.statusDefinition.name:
+        yield* this.status(interaction);
+        break;
+      case AutoroleCommands.targetDefinition.name:
+        yield* discordRequest(() =>
+          interaction.reply({
+            flags: MessageFlags.Ephemeral,
+            content:
+              "This command marks the autorole configuration. A server administrator selects exactly one allowed role in Server Settings > Integrations > this bot > /autorole-target. Running this command does not assign or change any roles.",
+          }),
+        );
+        break;
+    }
+  });
 
-  private status(interaction: ChatInputCommandInteraction): Effect.Effect<void, Error> {
-    return Effect.gen({ self: this }, function* () {
-      yield* tryPromise(() => interaction.deferReply({ flags: MessageFlags.Ephemeral }));
-      const guild = interaction.guild;
-      if (
-        !guild ||
-        !interaction.memberPermissions?.has([
-          PermissionFlagsBits.ManageGuild,
-          PermissionFlagsBits.ManageRoles,
-        ])
-      ) {
-        yield* tryPromise(() =>
-          interaction.editReply(
-            "You need Manage Server and Manage Roles to inspect autorole settings.",
-          ),
-        );
-        return;
-      }
-      const result = yield* Effect.result(this.roles.getConfiguredRole(guild));
-      if (Result.isFailure(result)) {
-        yield* logError("autorole_status_failed", {
-          guildId: guild.id,
-          message: result.failure.message,
-        });
-        yield* tryPromise(() =>
-          interaction.editReply(
-            result.failure.message || "Unable to read Discord integration settings.",
-          ),
-        );
-        return;
-      }
-      const role = result.success;
-      if (role === null) {
-        yield* tryPromise(() =>
-          interaction.editReply(
-            "Autorole is disabled. In Server Settings > Integrations > this bot > /autorole-target, add exactly one role and enable its checkmark. Save the command-specific permissions.",
-          ),
-        );
-        return;
-      }
-      yield* tryPromise(() =>
+  private status = Effect.fn("AutoroleCommands.status")(function* (
+    this: AutoroleCommands,
+    interaction: ChatInputCommandInteraction,
+  ) {
+    yield* discordRequest(() => interaction.deferReply({ flags: MessageFlags.Ephemeral }));
+    const guild = interaction.guild;
+    if (
+      !guild ||
+      !interaction.memberPermissions?.has([
+        PermissionFlagsBits.ManageGuild,
+        PermissionFlagsBits.ManageRoles,
+      ])
+    ) {
+      yield* discordRequest(() =>
         interaction.editReply(
-          `Autorole: <@&${role.id}>. Bot permissions and hierarchy are valid. New human members receive this role after membership screening. To disable, remove or deny its entry on /autorole-target in Integrations.`,
+          "You need Manage Server and Manage Roles to inspect autorole settings.",
         ),
       );
-    });
-  }
+      return;
+    }
+    const result = yield* Effect.result(this.roles.getConfiguredRole(guild));
+    if (Result.isFailure(result)) {
+      yield* logError("autorole_status_failed", {
+        guildId: guild.id,
+        message: result.failure.message,
+      });
+      yield* discordRequest(() =>
+        interaction.editReply(
+          result.failure.message || "Unable to read Discord integration settings.",
+        ),
+      );
+      return;
+    }
+    const role = result.success;
+    if (role === null) {
+      yield* discordRequest(() =>
+        interaction.editReply(
+          "Autorole is disabled. In Server Settings > Integrations > this bot > /autorole-target, add exactly one role and enable its checkmark. Save the command-specific permissions.",
+        ),
+      );
+      return;
+    }
+    yield* discordRequest(() =>
+      interaction.editReply(
+        `Autorole: <@&${role.id}>. Bot permissions and hierarchy are valid. New human members receive this role after membership screening. To disable, remove or deny its entry on /autorole-target in Integrations.`,
+      ),
+    );
+  });
 }

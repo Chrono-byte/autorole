@@ -1,6 +1,6 @@
 import { Effect, type Scope } from "effect";
 import { asError } from "./effectful";
-import { logError } from "./logger";
+import { journalLoggerLayer, logError } from "./logger";
 
 // Entrypoints own process signals; interruption then closes all scoped resources.
 export async function runMain(
@@ -12,11 +12,17 @@ export async function runMain(
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
   try {
-    await Effect.runPromise(Effect.scoped(program), { signal: shutdown.signal });
+    await Effect.runPromise(Effect.scoped(program).pipe(Effect.provide(journalLoggerLayer)), {
+      signal: shutdown.signal,
+    });
   } catch (error) {
     if (!shutdown.signal.aborted) {
       process.exitCode = 1;
-      await Effect.runPromise(logError(failureEvent, { message: asError(error).message }));
+      await Effect.runPromise(
+        logError(failureEvent, { message: asError(error).message }).pipe(
+          Effect.provide(journalLoggerLayer),
+        ),
+      );
     }
   } finally {
     process.off("SIGINT", onSignal);

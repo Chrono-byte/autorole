@@ -2,7 +2,8 @@ import { REST, Routes } from "discord.js";
 import { Effect } from "effect";
 import { readConfiguration, type Configuration } from "../config/Configuration";
 import { AutoroleCommands } from "../bot/AutoroleCommands";
-import { tryPromise, trySync } from "../effectful";
+import { trySync } from "../effectful";
+import { discordRequest } from "../errors";
 import { runMain } from "../runMain";
 
 class CommandRegistrar {
@@ -17,7 +18,7 @@ class CommandRegistrar {
     return Effect.gen({ self: this }, function* () {
       const rest = yield* trySync(() => new REST({ version: "10" }).setToken(this.config.token));
       for (const definition of definitions) {
-        yield* tryPromise((signal) => rest.post(route, { body: definition.toJSON(), signal }));
+        yield* discordRequest((signal) => rest.post(route, { body: definition.toJSON(), signal }));
       }
       yield* Effect.sync(() =>
         process.stdout.write(

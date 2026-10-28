@@ -4,11 +4,14 @@ import { dirname, join } from "node:path";
 import {
   Client,
   DiscordAPIError,
+  HTTPError,
   PermissionFlagsBits,
   Routes,
   type ApplicationCommandPermissions,
 } from "discord.js";
 import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
+import { tryPromise } from "../src/effectful";
 import { OutstandingAssignments } from "../src/bot/OutstandingAssignments";
 import { readConfiguration } from "../src/config/Configuration";
 import { IntegrationSettings } from "../src/config/IntegrationSettings";
@@ -38,6 +41,8 @@ class DiscordFixture {
   pending = false;
   omitPending = false;
   memberReadGate: Promise<void> | undefined;
+  onMemberRead: (() => void) | undefined;
+  memberReads = 0;
   bot = false;
   existingRoles: string[] = [];
   readonly writes: string[] = [];
@@ -99,7 +104,9 @@ class DiscordFixture {
       ];
     }
     if (route === Routes.guildMember(ids.guild, ids.member)) {
+      this.memberReads++;
       const capturedPending = this.pending;
+      this.onMemberRead?.();
       await this.memberReadGate;
       if (this.memberLeft)
         throw new DiscordAPIError(
@@ -324,47 +331,54 @@ test("status resolves the same validated role without assigning it", async () =>
   });
 });
 
-test("outstanding screening survives restart and assigns the current target", async () => {
+test("screening recovery honors its persisted deadline and current target after restart", async () => {
   await withDiscord(async (fixture) => {
+    fixture.pending = true;
     const { member, roles } = await fixture.setup();
     member.guild.available = true;
     fixture.client.guilds.cache.set(member.guild.id, member.guild);
     const path = `/tmp/autorole-test-${crypto.randomUUID()}.sqlite`;
-    fixture.pending = true;
-    await Effect.runPromise(
-      Effect.scoped(
+    try {
+      await Effect.runPromise(
         Effect.gen(function* () {
-          const first = yield* OutstandingAssignments.make(
-            path,
-            fixture.client,
-            roles,
-            () => Effect.void,
+          yield* TestClock.setTime(0);
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const first = yield* OutstandingAssignments.make(
+                path,
+                fixture.client,
+                roles,
+                () => Effect.void,
+              );
+              yield* first.observeJoin(member);
+            }),
           );
-          yield* first.observeJoin(member);
-          yield* first.reconcile();
-        }),
-      ),
-    );
-    expect(fixture.writes).toEqual([]);
-    fixture.pending = false;
-    fixture.permissions = [{ id: ids.replacement, type: 1, permission: true }];
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const second = yield* OutstandingAssignments.make(
-            path,
-            fixture.client,
-            roles,
-            () => Effect.void,
+          expect(fixture.writes).toEqual([]);
+          fixture.pending = false;
+          fixture.permissions = [{ id: ids.replacement, type: 1, permission: true }];
+          yield* TestClock.adjust(5 * 60_000 - 1);
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const second = yield* OutstandingAssignments.make(
+                path,
+                fixture.client,
+                roles,
+                () => Effect.void,
+              );
+              yield* second.reconcile();
+              expect(fixture.writes).toEqual([]);
+              yield* TestClock.adjust(1);
+              yield* second.reconcile();
+            }),
           );
-          yield* second.observe(member);
-        }),
-      ),
-    );
-    expect(fixture.writes).toEqual([
-      Routes.guildMemberRole(ids.guild, ids.member, ids.replacement),
-    ]);
-    await Bun.file(path).delete();
+          expect(fixture.writes).toEqual([
+            Routes.guildMemberRole(ids.guild, ids.member, ids.replacement),
+          ]);
+        }).pipe(Effect.provide(TestClock.layer())),
+      );
+    } finally {
+      await Bun.file(path).delete();
+    }
   });
 });
 
@@ -396,6 +410,8 @@ test("screening completion during a member fetch triggers another check", async 
     member.guild.available = true;
     fixture.client.guilds.cache.set(member.guild.id, member.guild);
     let release: (() => void) | undefined;
+    const readStarted = Promise.withResolvers<void>();
+    fixture.onMemberRead = () => readStarted.resolve();
     fixture.pending = true;
     fixture.memberReadGate = new Promise<void>((resolve) => {
       release = resolve;
@@ -410,7 +426,7 @@ test("screening completion during a member fetch triggers another check", async 
             () => Effect.void,
           );
           const joinFiber = yield* Effect.forkChild(tracker.observeJoin(member));
-          yield* Effect.sleep(10);
+          yield* tryPromise(() => readStarted.promise);
           fixture.pending = false;
           member.pending = false;
           yield* tracker.observe(member);
@@ -430,6 +446,8 @@ test("persisted gateway screening evidence survives an omitted REST field and re
     fixture.client.guilds.cache.set(member.guild.id, member.guild);
     const path = `/tmp/autorole-evidence-${crypto.randomUUID()}.sqlite`;
     let release: (() => void) | undefined;
+    const readStarted = Promise.withResolvers<void>();
+    fixture.onMemberRead = () => readStarted.resolve();
     fixture.memberReadGate = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -443,7 +461,7 @@ test("persisted gateway screening evidence survives an omitted REST field and re
             () => Effect.void,
           );
           const joinFiber = yield* Effect.forkChild(first.observeJoin(member));
-          yield* Effect.sleep(10);
+          yield* tryPromise(() => readStarted.promise);
           yield* first.stop();
           release?.();
           yield* Fiber.join(joinFiber);
@@ -479,6 +497,8 @@ test("interruption discards a queued recheck without waiting for Discord", async
     fixture.client.guilds.cache.set(member.guild.id, member.guild);
     const gate = Promise.withResolvers<void>();
     fixture.memberReadGate = gate.promise;
+    const readStarted = Promise.withResolvers<void>();
+    fixture.onMemberRead = () => readStarted.resolve();
     let rescued = false;
     const rescue = setTimeout(() => {
       rescued = true;
@@ -495,7 +515,7 @@ test("interruption discards a queued recheck without waiting for Discord", async
               () => Effect.void,
             );
             const job = yield* Effect.forkChild(tracker.observeJoin(member));
-            yield* Effect.sleep(5);
+            yield* tryPromise(() => readStarted.promise);
             yield* tracker.observe(member);
             yield* Fiber.interrupt(job);
             expect(rescued).toBe(false);
@@ -507,5 +527,159 @@ test("interruption discards a queued recheck without waiting for Discord", async
       gate.resolve();
     }
     expect(fixture.writes).toEqual([]);
+  });
+});
+
+test("transient Discord failures back off to one hour and recover without duplicate assignment", async () => {
+  await withDiscord(async (fixture) => {
+    const { member, roles } = await fixture.setup();
+    member.guild.available = true;
+    fixture.client.guilds.cache.set(member.guild.id, member.guild);
+    fixture.permissionRequestFails = true;
+    fixture.permissionError = new HTTPError(503, "Unavailable", "GET", "https://discord.com", {});
+    let failures = 0;
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(0);
+          const tracker = yield* OutstandingAssignments.make(
+            ":memory:",
+            fixture.client,
+            roles,
+            () =>
+              Effect.sync(() => {
+                failures++;
+              }),
+          );
+          yield* tracker.observeJoin(member);
+          expect(failures).toBe(1);
+          for (const minutes of [1, 2, 4, 8, 16, 32, 60, 60]) {
+            const previous = failures;
+            yield* TestClock.adjust(minutes * 60_000 - 1);
+            yield* tracker.reconcile();
+            expect(failures).toBe(previous);
+            yield* TestClock.adjust(1);
+            yield* tracker.reconcile();
+            expect(failures).toBe(previous + 1);
+          }
+          fixture.permissionRequestFails = false;
+          yield* TestClock.adjust(60 * 60_000);
+          yield* tracker.reconcile();
+          expect(fixture.writes).toHaveLength(1);
+          const reads = fixture.memberReads;
+          yield* TestClock.adjust(60 * 60_000);
+          yield* tracker.reconcile();
+          expect(fixture.memberReads).toBe(reads);
+        }),
+      ).pipe(Effect.provide(TestClock.layer())),
+    );
+  });
+});
+
+for (const failure of ["configuration", "permission", "disabled"]) {
+  test(`${failure} retains the assignment and rechecks in five minutes`, async () => {
+    await withDiscord(async (fixture) => {
+      const { member, roles } = await fixture.setup();
+      member.guild.available = true;
+      fixture.client.guilds.cache.set(member.guild.id, member.guild);
+      if (failure === "configuration")
+        fixture.permissions.push({ id: ids.replacement, type: 1, permission: true });
+      if (failure === "permission") {
+        fixture.permissionRequestFails = true;
+        fixture.permissionError = new DiscordAPIError(
+          { message: "Missing Permissions", code: 50013 },
+          50013,
+          403,
+          "GET",
+          "https://discord.com",
+          {},
+        );
+      }
+      if (failure === "disabled") fixture.permissions = [];
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            yield* TestClock.setTime(0);
+            const tracker = yield* OutstandingAssignments.make(
+              ":memory:",
+              fixture.client,
+              roles,
+              () => Effect.void,
+            );
+            yield* tracker.observeJoin(member);
+            expect(fixture.writes).toEqual([]);
+            fixture.manageRoles = true;
+            fixture.permissionRequestFails = false;
+            fixture.permissions = [{ id: ids.target, type: 1, permission: true }];
+            yield* TestClock.adjust(5 * 60_000 - 1);
+            yield* tracker.reconcile();
+            expect(fixture.writes).toEqual([]);
+            yield* TestClock.adjust(1);
+            yield* tracker.reconcile();
+            expect(fixture.writes).toHaveLength(1);
+          }),
+        ).pipe(Effect.provide(TestClock.layer())),
+      );
+    });
+  });
+}
+
+test("a departed member is removed instead of retried", async () => {
+  await withDiscord(async (fixture) => {
+    const { member, roles } = await fixture.setup();
+    member.guild.available = true;
+    fixture.client.guilds.cache.set(member.guild.id, member.guild);
+    fixture.memberLeft = true;
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const tracker = yield* OutstandingAssignments.make(
+            ":memory:",
+            fixture.client,
+            roles,
+            () => Effect.void,
+          );
+          yield* tracker.observeJoin(member);
+          const reads = fixture.memberReads;
+          yield* TestClock.adjust(60 * 60_000);
+          yield* tracker.reconcile();
+          expect(fixture.memberReads).toBe(reads);
+          expect(fixture.writes).toEqual([]);
+        }),
+      ).pipe(Effect.provide(TestClock.layer())),
+    );
+  });
+});
+
+test("background reconciliation follows the test clock and stops with its fiber", async () => {
+  await withDiscord(async (fixture) => {
+    const { member, roles } = await fixture.setup();
+    member.guild.available = true;
+    fixture.client.guilds.cache.set(member.guild.id, member.guild);
+    fixture.permissions = [];
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(0);
+          const tracker = yield* OutstandingAssignments.make(
+            ":memory:",
+            fixture.client,
+            roles,
+            () => Effect.void,
+          );
+          yield* tracker.observeJoin(member);
+          const poller = yield* Effect.forkChild(tracker.start());
+          fixture.permissions = [{ id: ids.target, type: 1, permission: true }];
+          yield* TestClock.adjust(4 * 60_000);
+          expect(fixture.writes).toEqual([]);
+          yield* TestClock.adjust(60_000);
+          expect(fixture.writes).toHaveLength(1);
+          yield* Fiber.interrupt(poller);
+          const reads = fixture.memberReads;
+          yield* TestClock.adjust(60 * 60_000);
+          expect(fixture.memberReads).toBe(reads);
+        }),
+      ).pipe(Effect.provide(TestClock.layer())),
+    );
   });
 });

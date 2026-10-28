@@ -1,15 +1,15 @@
 import {
   ActivityType,
   Client,
-  DiscordAPIError,
   Events,
   GatewayIntentBits,
   type GuildMember,
   type Interaction,
   type PartialGuildMember,
 } from "discord.js";
-import { Deferred, Effect, Result, Schedule } from "effect";
-import { asError, tryPromise, trySync } from "../effectful";
+import { Deferred, Effect, Schedule } from "effect";
+import { asError, trySync } from "../effectful";
+import { DiscordRequestError, discordRequest } from "../errors";
 import { type Configuration } from "../config/Configuration";
 import { IntegrationSettings } from "../config/IntegrationSettings";
 import { logError, logInfo } from "../logger";
@@ -44,6 +44,7 @@ export class AutoroleBot {
     const configuration = this.configuration;
     return Effect.gen(function* () {
       const scope = yield* Effect.scope;
+      const runSync = Effect.runSyncWith(yield* Effect.context());
       const shutdown = yield* Deferred.make<void>();
       const client = yield* Effect.acquireRelease(
         trySync(
@@ -52,7 +53,7 @@ export class AutoroleBot {
               intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
             }),
         ),
-        (discordClient) => tryPromise(() => discordClient.destroy()).pipe(Effect.ignore),
+        (discordClient) => discordRequest(() => discordClient.destroy()).pipe(Effect.ignore),
       );
       const roles = new RoleService(new IntegrationSettings(configuration.guildId));
       const assignments = yield* OutstandingAssignments.make(
@@ -66,18 +67,17 @@ export class AutoroleBot {
           logError("autorole_assignment_error", {
             guildId,
             memberId,
-            code: error instanceof DiscordAPIError ? error.code : undefined,
+            code: error instanceof DiscordRequestError ? error.code : undefined,
             message: asError(error).message,
           }),
         configuration.guildId,
       );
       const commands = new AutoroleCommands(roles);
       const fork = (effect: Effect.Effect<void, Error>) => {
-        const handled = Effect.matchEffect(effect, {
-          onFailure: (error) => logError("autorole_handler_failed", { message: error.message }),
-          onSuccess: () => Effect.void,
-        });
-        Effect.runSync(Effect.forkIn(scope, { startImmediately: true })(handled));
+        const handled = effect.pipe(
+          Effect.catch((error) => logError("autorole_handler_failed", { message: error.message })),
+        );
+        runSync(Effect.forkIn(scope, { startImmediately: true })(handled));
       };
       const onReady = (readyClient: Client<true>) => {
         fork(
@@ -101,16 +101,17 @@ export class AutoroleBot {
               updatePresence.pipe(Effect.repeat(Schedule.spaced(MINUTE_MS)), Effect.asVoid),
             );
             yield* logInfo("autorole_connected", { user: readyClient.user.tag });
-            const notification = yield* Effect.result(notifyReady());
-            if (Result.isFailure(notification)) {
-              yield* logError("autorole_ready_notification_failed", {
-                message: notification.failure.message,
-              });
-              yield* Effect.sync(() => {
-                process.exitCode = 1;
-              });
-              yield* Deferred.succeed(shutdown, undefined);
-            }
+            yield* notifyReady().pipe(
+              Effect.catch((error) =>
+                Effect.gen(function* () {
+                  yield* logError("autorole_ready_notification_failed", { message: error.message });
+                  yield* Effect.sync(() => {
+                    process.exitCode = 1;
+                  });
+                  yield* Deferred.succeed(shutdown, undefined);
+                }),
+              ),
+            );
           }),
         );
       };
@@ -145,7 +146,7 @@ export class AutoroleBot {
         }),
         (removeListeners) => Effect.sync(removeListeners),
       );
-      yield* tryPromise(() => client.login(configuration.token));
+      yield* discordRequest(() => client.login(configuration.token));
       yield* Deferred.await(shutdown);
     });
   }

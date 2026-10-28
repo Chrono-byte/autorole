@@ -4,29 +4,33 @@ import {
   type Guild,
 } from "discord.js";
 import { Effect } from "effect";
-import { tryPromise, trySync } from "../effectful";
+import { ConfigurationError, discordRequest } from "../errors";
 
 export class IntegrationSettings {
   constructor(private readonly guildId: string | undefined) {}
 
-  getRoleId(guild: Guild): Effect.Effect<string | null, Error> {
+  getRoleId = Effect.fn("IntegrationSettings.getRoleId")(function* (
+    this: IntegrationSettings,
+    guild: Guild,
+  ) {
     const guildId = this.guildId;
-    return Effect.gen(function* () {
-      if (guildId && guildId !== guild.id) return null;
-      const application = guild.client.application;
-      if (!application) return yield* Effect.fail(new Error("Discord application is not ready."));
-      const commands = yield* tryPromise(() =>
-        guildId ? guild.commands.fetch() : application.commands.fetch(),
+    if (guildId && guildId !== guild.id) return null;
+    const application = guild.client.application;
+    if (!application)
+      return yield* Effect.fail(
+        new ConfigurationError({ message: "Discord application is not ready." }),
       );
-      const target = commands.find((command) => command.name === "autorole-target");
-      if (!target)
-        return yield* Effect.fail(new Error("Run bun run register to register /autorole-target."));
-      const permissions = yield* tryPromise(() => guild.commands.permissions.fetch({}));
-      return yield* trySync(() =>
-        IntegrationSettings.selectRole(guild.id, permissions.get(target.id) ?? []),
+    const commands = yield* discordRequest(() =>
+      guildId ? guild.commands.fetch() : application.commands.fetch(),
+    );
+    const target = commands.find((command) => command.name === "autorole-target");
+    if (!target)
+      return yield* Effect.fail(
+        new ConfigurationError({ message: "Run bun run register to register /autorole-target." }),
       );
-    });
-  }
+    const permissions = yield* discordRequest(() => guild.commands.permissions.fetch({}));
+    return yield* IntegrationSettings.selectRole(guild.id, permissions.get(target.id) ?? []);
+  });
 
   private static selectRole(
     guildId: string,
@@ -43,10 +47,13 @@ export class IntegrationSettings {
         .map((entry) => entry.id),
     );
     if (roleIds.size > 1) {
-      throw new Error(
-        "Allow exactly one role on /autorole-target in Server Settings > Integrations. Multiple allowed roles disable assignment.",
+      return Effect.fail(
+        new ConfigurationError({
+          message:
+            "Allow exactly one role on /autorole-target in Server Settings > Integrations. Multiple allowed roles disable assignment.",
+        }),
       );
     }
-    return roleIds.values().next().value ?? null;
+    return Effect.succeed(roleIds.values().next().value ?? null);
   }
 }
