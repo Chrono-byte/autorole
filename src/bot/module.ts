@@ -2,7 +2,6 @@ import { Events, type Client } from "discord.js";
 import { Effect } from "effect";
 import { event } from "../../packages/discord/framework";
 import { AutoroleCommands } from "./AutoroleCommands";
-import { IntegrationSettings } from "./IntegrationSettings";
 import { OutstandingAssignments } from "./OutstandingAssignments";
 import { RoleService } from "./RoleService";
 
@@ -15,7 +14,7 @@ export const makeAutorole = Effect.fn("Autorole.make")(function* (
   },
 ) {
   const scope = yield* Effect.scope;
-  const roles = new RoleService(new IntegrationSettings(options.guildId));
+  const roles = new RoleService(options.guildId);
   const assignments = yield* OutstandingAssignments.make(
     options.path,
     client,

@@ -1,10 +1,10 @@
-import { type Guild, type GuildMember } from "discord.js";
+import { ApplicationCommandPermissionType, type Guild, type GuildMember } from "discord.js";
 import { Effect } from "effect";
+import { commandPermissions } from "../../packages/discord/commands";
 import { roleAssignability } from "../../packages/discord/roles";
-import { IntegrationSettings } from "./IntegrationSettings";
 import { ConfigurationError, discordRequest } from "../errors";
 export class RoleService {
-  constructor(private readonly settings: IntegrationSettings) {}
+  constructor(private readonly guildId?: string) {}
 
   assign = Effect.fn("RoleService.assign")(function* (
     this: RoleService,
@@ -27,7 +27,7 @@ export class RoleService {
     this: RoleService,
     guild: Guild,
   ) {
-    const roleId = yield* this.settings.getRoleId(guild);
+    const roleId = yield* this.getRoleId(guild);
     if (!roleId) return null;
     const role = yield* discordRequest(() => guild.roles.fetch(roleId));
     if (!role)
@@ -45,5 +45,35 @@ export class RoleService {
     };
     if (problem) return yield* new ConfigurationError({ message: messages[problem] });
     return role;
+  });
+
+  private getRoleId = Effect.fn("RoleService.getRoleId")(function* (
+    this: RoleService,
+    guild: Guild,
+  ) {
+    if (this.guildId && this.guildId !== guild.id) return null;
+    const result = yield* commandPermissions(guild, "autorole-target", !!this.guildId);
+    if (result.status === "not-ready")
+      return yield* new ConfigurationError({ message: "Discord application is not ready." });
+    if (result.status === "missing")
+      return yield* new ConfigurationError({
+        message: "Run bun run register to register /autorole-target.",
+      });
+    const roleIds = new Set(
+      result.permissions
+        .filter(
+          (entry) =>
+            entry.type === ApplicationCommandPermissionType.Role &&
+            entry.permission &&
+            entry.id !== guild.id,
+        )
+        .map((entry) => entry.id),
+    );
+    if (roleIds.size > 1)
+      return yield* new ConfigurationError({
+        message:
+          "Allow exactly one role on /autorole-target in Server Settings > Integrations. Multiple allowed roles disable assignment.",
+      });
+    return roleIds.values().next().value ?? null;
   });
 }

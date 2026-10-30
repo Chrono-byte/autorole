@@ -15,7 +15,6 @@ import { TestClock } from "effect/testing";
 import { tryPromise } from "../src/effectful";
 import { OutstandingAssignments } from "../src/bot/OutstandingAssignments";
 import { readConfiguration } from "../src/config/Configuration";
-import { IntegrationSettings } from "../src/bot/IntegrationSettings";
 import { RoleService } from "../src/bot/RoleService";
 import { AutoroleCommands } from "../src/bot/AutoroleCommands";
 import { makeAutorole } from "../src/bot/module";
@@ -178,7 +177,7 @@ class DiscordFixture {
     );
     const guild = await this.client.guilds.fetch({ guild: ids.guild, force: true });
     const member = await guild.members.fetch({ user: ids.member, force: true });
-    return { member, roles: new RoleService(new IntegrationSettings(config.guildId)) };
+    return { member, roles: new RoleService(config.guildId) };
   }
 
   async assign() {
@@ -322,7 +321,7 @@ test("status resolves the same validated role without assigning it", async () =>
         DISCORD_GUILD_ID: ids.guild,
       }),
     );
-    const roles = new RoleService(new IntegrationSettings(config.guildId));
+    const roles = new RoleService(config.guildId);
     const guild = await fixture.client.guilds.fetch(ids.guild);
     expect((await Effect.runPromise(roles.getConfiguredRole(guild)))?.id).toBe(ids.target);
     fixture.permissions = [];
@@ -718,9 +717,7 @@ test("autorole module handles a join and removes its listeners on scope exit", a
 
 test("autorole command catalog dispatches target and permission-denied status", async () => {
   const { MessageFlags } = await import("discord.js");
-  const registry = new AutoroleCommands(
-    new RoleService(new IntegrationSettings(undefined)),
-  ).registry();
+  const registry = new AutoroleCommands(new RoleService()).registry();
   let targetReply: unknown;
   let statusReply = "";
   let deferred: unknown;
