@@ -1,12 +1,8 @@
 import { type Client, type GuildMember, type PartialGuildMember } from "discord.js";
 import { Effect } from "effect";
-import { JobWorker, type JobOutcome } from "@autorole/jobs";
-import {
-  ConfigurationError,
-  DiscordRequestError,
-  StorageError,
-  discordRequest,
-} from "../../errors";
+import { fetchGuildMember } from "@autorole/discord-framework";
+import { exponentialBackoff, JobWorker, type JobOutcome } from "@autorole/jobs";
+import { ConfigurationError, DiscordRequestError, StorageError } from "../../errors";
 import { logError } from "../../logger";
 import { AssignmentStore, assignmentKey, type Assignment } from "./AssignmentStore";
 import { RoleService } from "../RoleService";
@@ -20,7 +16,7 @@ function retryDelay(
   reason: "pending" | "disabled" | ConfigurationError | DiscordRequestError,
 ) {
   if (reason instanceof DiscordRequestError && reason.retryable)
-    return Math.min(HOUR_MS, MINUTE_MS * 2 ** Math.min(entry.attempts, 6));
+    return exponentialBackoff(entry.attempts, MINUTE_MS, HOUR_MS);
   return RECHECK_MS;
 }
 
@@ -128,16 +124,7 @@ export class OutstandingAssignments {
     this: OutstandingAssignments,
     entry: Assignment,
   ) {
-    const guild = this.client.guilds.cache.get(entry.guildId);
-    if (!guild || guild.available === false)
-      return yield* new DiscordRequestError({
-        message: "Guild is unavailable",
-        cause: new Error("Guild is unavailable"),
-        retryable: true,
-      });
-    const member = yield* discordRequest(() =>
-      guild.members.fetch({ user: entry.memberId, force: true }),
-    );
+    const member = yield* fetchGuildMember(this.client, entry.guildId, entry.memberId);
     if (this.worker.isStopped) return { type: "skip" } as const;
     if (member.joinedTimestamp !== entry.joinedAt) return { type: "complete" } as const;
     const latest = yield* this.store.get(entry.guildId, entry.memberId);
