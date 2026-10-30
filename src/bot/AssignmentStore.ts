@@ -46,7 +46,7 @@ export class AssignmentStore {
       const exists = db
         .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'assignments'")
         .get();
-      if (exists)
+      if (exists && db.query("SELECT 1 FROM assignments LIMIT 1").get())
         throw new Error(
           "Legacy assignments table found. Migrate or reconcile it before starting the bot.",
         );

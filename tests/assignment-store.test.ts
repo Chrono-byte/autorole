@@ -136,6 +136,35 @@ test("legacy assignment tables stop startup without changing stored records", as
   }
 });
 
+test("an empty legacy table permits startup and remains available for rollback", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "autorole-empty-legacy-"));
+  const path = join(directory, "assignments.sqlite");
+  const db = new Database(path, { create: true });
+  db.run("CREATE TABLE assignments (guildId TEXT, memberId TEXT)");
+  db.close();
+  try {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const store = yield* AssignmentStore.make(path);
+          yield* store.recordJoin(observed);
+          expect(yield* store.get("guild", "member")).toMatchObject(observed);
+        }),
+      ),
+    );
+    const reopened = new Database(path);
+    try {
+      expect(reopened.query("SELECT count(*) AS count FROM assignments").get()).toEqual({
+        count: 0,
+      });
+    } finally {
+      reopened.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("invalid persisted jobs report the operation without hiding the cause", async () => {
   const directory = await mkdtemp(join(tmpdir(), "autorole-invalid-job-"));
   const path = join(directory, "assignments.sqlite");
