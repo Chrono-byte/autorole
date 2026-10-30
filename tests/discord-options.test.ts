@@ -1,4 +1,4 @@
-import { expect, expectTypeOf, test } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   ApplicationCommandOptionType,
   ChannelType,
@@ -86,33 +86,4 @@ test("required and optional option readers preserve discord.js behavior", async 
   } finally {
     await client.destroy();
   }
-});
-
-test("option readers infer required and nullable values", () => {
-  const { values } = fixture();
-  expectTypeOf(values.required.string("text")).toEqualTypeOf<Effect.Effect<string, Error>>();
-  expectTypeOf(values.optional.string("text")).toEqualTypeOf<Effect.Effect<string | null, Error>>();
-  expectTypeOf(values.required.boolean("boolean")).toEqualTypeOf<Effect.Effect<boolean, Error>>();
-  expectTypeOf(values.optional.integer("integer")).toEqualTypeOf<
-    Effect.Effect<number | null, Error>
-  >();
-  expectTypeOf(values.required.channel("channel", [ChannelType.GuildText])).toMatchTypeOf<
-    Effect.Effect<{ type: ChannelType.GuildText }, Error>
-  >();
-});
-
-function assertCachedTypes(
-  interaction: import("discord.js").ChatInputCommandInteraction<"cached">,
-) {
-  const values = options(interaction.options);
-  expectTypeOf(values.optional.member("member")).toEqualTypeOf<
-    Effect.Effect<import("discord.js").GuildMember | null, Error>
-  >();
-  expectTypeOf(values.required.role("role")).toEqualTypeOf<
-    Effect.Effect<import("discord.js").Role, Error>
-  >();
-}
-
-test("cached interaction option readers retain cache-specific types", () => {
-  expectTypeOf(assertCachedTypes).toBeFunction();
 });

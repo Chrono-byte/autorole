@@ -80,23 +80,25 @@ test("command upserts use the selected scope and preserve unrelated commands", a
   const { REST, Routes } = await import("discord.js");
   const { upsertCommands } = await import("@autorole/discord-framework");
   const rest = new REST({ version: "10" });
-  const routes: string[] = [];
-  const post = spyOn(rest, "post").mockImplementation(async (route) => {
-    routes.push(route);
-    return {};
-  });
+  const post = spyOn(rest, "post").mockResolvedValue({});
+  const put = spyOn(rest, "put").mockResolvedValue({});
+  const remove = spyOn(rest, "delete").mockResolvedValue({});
   const definitions = [{ toJSON: () => ({ name: "one" }) }, { toJSON: () => ({ name: "two" }) }];
   try {
     await Effect.runPromise(upsertCommands(rest, "app", "guild", definitions));
     await Effect.runPromise(upsertCommands(rest, "app", undefined, definitions));
-    expect(routes).toEqual([
-      Routes.applicationGuildCommands("app", "guild"),
-      Routes.applicationGuildCommands("app", "guild"),
-      Routes.applicationCommands("app"),
-      Routes.applicationCommands("app"),
+    expect(post.mock.calls.map(([route, options]) => [route, options?.body])).toEqual([
+      [Routes.applicationGuildCommands("app", "guild"), { name: "one" }],
+      [Routes.applicationGuildCommands("app", "guild"), { name: "two" }],
+      [Routes.applicationCommands("app"), { name: "one" }],
+      [Routes.applicationCommands("app"), { name: "two" }],
     ]);
+    expect(put).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
   } finally {
     post.mockRestore();
+    put.mockRestore();
+    remove.mockRestore();
   }
 });
 
