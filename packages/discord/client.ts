@@ -1,5 +1,6 @@
 import { Client, type ClientEvents, type ClientOptions } from "discord.js";
 import { Effect } from "effect";
+import { discordRequest } from "./request";
 
 /** Acquire a Discord client for the current scope. */
 export function makeClient(options: ClientOptions, close: (client: Client) => Effect.Effect<void>) {
@@ -46,3 +47,18 @@ export function handlers(client: Client, report: (error: Error) => Effect.Effect
     once = false,
   ) => listen(client, event, handler, report, once);
 }
+
+/** Acquire a client, install its behavior, log in, and stay alive until stopped. */
+export const runClient = Effect.fn("Discord.runClient")(function* (
+  options: ClientOptions,
+  token: string,
+  setup: (client: Client) => Effect.Effect<void, Error, import("effect").Scope.Scope>,
+  until: Effect.Effect<void> = Effect.never,
+) {
+  const client = yield* makeClient(options, (discordClient) =>
+    discordRequest(() => discordClient.destroy()).pipe(Effect.ignore),
+  );
+  yield* setup(client);
+  yield* discordRequest(() => client.login(token));
+  yield* until;
+});

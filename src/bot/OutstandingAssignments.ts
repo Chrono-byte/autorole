@@ -3,7 +3,7 @@ import { DateTime, Effect } from "effect";
 import { JobWorker } from "../../packages/jobs/worker";
 import { ConfigurationError, DiscordRequestError, StorageError, discordRequest } from "../errors";
 import { logError } from "../logger";
-import { AssignmentStore, assignmentKey, type Assignment } from "../storage/AssignmentStore";
+import { AssignmentStore, assignmentKey, type Assignment } from "./AssignmentStore";
 import { RoleService } from "./RoleService";
 
 const MINUTE_MS = 60_000;

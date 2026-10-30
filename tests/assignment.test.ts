@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import {
   Client,
+  Events,
   DiscordAPIError,
   HTTPError,
   PermissionFlagsBits,
@@ -14,9 +15,11 @@ import { TestClock } from "effect/testing";
 import { tryPromise } from "../src/effectful";
 import { OutstandingAssignments } from "../src/bot/OutstandingAssignments";
 import { readConfiguration } from "../src/config/Configuration";
-import { IntegrationSettings } from "../src/config/IntegrationSettings";
+import { IntegrationSettings } from "../src/bot/IntegrationSettings";
 import { RoleService } from "../src/bot/RoleService";
 import { AutoroleCommands } from "../src/bot/AutoroleCommands";
+import { makeAutorole } from "../src/bot/module";
+import { install } from "../packages/discord/framework";
 
 const ids = {
   app: "100000000000000001",
@@ -46,6 +49,7 @@ class DiscordFixture {
   bot = false;
   existingRoles: string[] = [];
   readonly writes: string[] = [];
+  onRoleWrite?: () => void;
   private readonly get = spyOn(this.client.rest, "get").mockImplementation(async (route) => {
     if (route === Routes.guild(ids.guild)) {
       return {
@@ -141,6 +145,7 @@ class DiscordFixture {
   });
   private readonly put = spyOn(this.client.rest, "put").mockImplementation(async (route) => {
     this.writes.push(route);
+    this.onRoleWrite?.();
     return undefined;
   });
 
@@ -682,4 +687,65 @@ test("background reconciliation follows the test clock and stops with its fiber"
       ).pipe(Effect.provide(TestClock.layer())),
     );
   });
+});
+
+test("autorole module handles a join and removes its listeners on scope exit", async () => {
+  await withDiscord(async (fixture) => {
+    const { member } = await fixture.setup();
+    member.guild.available = true;
+    fixture.client.guilds.cache.set(member.guild.id, member.guild);
+    const written = Promise.withResolvers<void>();
+    fixture.onRoleWrite = written.resolve;
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const module = yield* makeAutorole(fixture.client, {
+            path: ":memory:",
+            report: () => Effect.void,
+          });
+          yield* install(fixture.client, module.commands, module.events, () => Effect.void);
+          fixture.client.emit(Events.GuildMemberAdd, member);
+          yield* tryPromise(() => written.promise);
+        }),
+      ),
+    );
+    expect(fixture.writes).toEqual([Routes.guildMemberRole(ids.guild, ids.member, ids.target)]);
+    expect(fixture.client.listenerCount(Events.GuildMemberAdd)).toBe(0);
+    expect(fixture.client.listenerCount(Events.GuildMemberUpdate)).toBe(0);
+    expect(fixture.client.listenerCount(Events.GuildMemberAvailable)).toBe(0);
+  });
+});
+
+test("autorole command catalog dispatches target and permission-denied status", async () => {
+  const { MessageFlags } = await import("discord.js");
+  const registry = new AutoroleCommands(
+    new RoleService(new IntegrationSettings(undefined)),
+  ).registry();
+  let targetReply: unknown;
+  let statusReply = "";
+  let deferred: unknown;
+  const target = {
+    commandName: "autorole-target",
+    reply: async (response: unknown) => {
+      targetReply = response;
+    },
+  } as unknown as import("discord.js").ChatInputCommandInteraction;
+  const status = {
+    commandName: "autorole",
+    guild: null,
+    deferReply: async (options: unknown) => {
+      deferred = options;
+    },
+    editReply: async (content: string) => {
+      statusReply = content;
+    },
+  } as unknown as import("discord.js").ChatInputCommandInteraction;
+  await Effect.runPromise(registry.dispatch(target));
+  await Effect.runPromise(registry.dispatch(status));
+  expect(targetReply).toMatchObject({
+    flags: MessageFlags.Ephemeral,
+    content: expect.stringContaining("Server Settings > Integrations"),
+  });
+  expect(deferred).toEqual({ flags: MessageFlags.Ephemeral });
+  expect(statusReply).toBe("You need Manage Server and Manage Roles to inspect autorole settings.");
 });

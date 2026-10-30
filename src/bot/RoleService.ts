@@ -1,7 +1,7 @@
 import { type Guild, type GuildMember } from "discord.js";
 import { Effect } from "effect";
 import { roleAssignability } from "../../packages/discord/roles";
-import { IntegrationSettings } from "../config/IntegrationSettings";
+import { IntegrationSettings } from "./IntegrationSettings";
 import { ConfigurationError, discordRequest } from "../errors";
 export class RoleService {
   constructor(private readonly settings: IntegrationSettings) {}

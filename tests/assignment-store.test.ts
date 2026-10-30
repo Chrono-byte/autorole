@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Result } from "effect";
 import { StorageError } from "../src/errors";
-import { AssignmentStore } from "../src/storage/AssignmentStore";
+import { AssignmentStore } from "../src/bot/AssignmentStore";
 
 const observed = { guildId: "guild", memberId: "member", joinedAt: 123, screeningComplete: 0 };
 
