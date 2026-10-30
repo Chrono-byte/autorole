@@ -7,6 +7,7 @@ import {
   DiscordAPIError,
   HTTPError,
   PermissionFlagsBits,
+  PermissionsBitField,
   Routes,
   type ApplicationCommandPermissions,
 } from "discord.js";
@@ -728,6 +729,11 @@ test("autorole command catalog dispatches target and permission-denied status", 
   const status = {
     commandName: "autorole",
     guild: null,
+    guildId: "guild",
+    memberPermissions: new PermissionsBitField(
+      PermissionFlagsBits.ManageGuild | PermissionFlagsBits.ManageRoles,
+    ),
+    options: { getSubcommand: () => "status", getSubcommandGroup: () => null },
     deferReply: async (options: unknown) => {
       deferred = options;
     },
@@ -743,4 +749,32 @@ test("autorole command catalog dispatches target and permission-denied status", 
   });
   expect(deferred).toEqual({ flags: MessageFlags.Ephemeral });
   expect(statusReply).toBe("You need Manage Server and Manage Roles to inspect autorole settings.");
+});
+
+test("autorole status routes an authorized interaction and uses the configured role", async () => {
+  await withDiscord(async (fixture) => {
+    const { member, roles } = await fixture.setup();
+    const registry = makeCommandRegistry(roles);
+    let deferred: unknown;
+    let message = "";
+    const interaction = {
+      commandName: "autorole",
+      guild: member.guild,
+      guildId: member.guild.id,
+      memberPermissions: new PermissionsBitField(
+        PermissionFlagsBits.ManageGuild | PermissionFlagsBits.ManageRoles,
+      ),
+      options: { getSubcommand: () => "status", getSubcommandGroup: () => null },
+      deferReply: async (value: unknown) => {
+        deferred = value;
+      },
+      editReply: async (value: string) => {
+        message = value;
+      },
+    } as unknown as import("discord.js").ChatInputCommandInteraction;
+    await Effect.runPromise(registry.dispatch(interaction));
+    const { MessageFlags } = await import("discord.js");
+    expect(deferred).toEqual({ flags: MessageFlags.Ephemeral });
+    expect(message).toContain(`Autorole: <@&${ids.target}>`);
+  });
 });

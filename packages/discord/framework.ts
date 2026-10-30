@@ -4,19 +4,23 @@ import {
   type Client,
   type ClientEvents,
 } from "discord.js";
-import { Deferred, Effect } from "effect";
+import { Cause, Deferred, Effect } from "effect";
 import { listen, runClient } from "./client";
 import { rotatePresence } from "./presence";
+import { notifyCommandFailure } from "./response";
+import { checkPermissions, PermissionDenied, type CommandPermissions } from "./permissions";
 
 export type CommandDefinition = { name: string; toJSON: () => { name: string } };
 export type Command = {
   definition: CommandDefinition;
   run: (interaction: ChatInputCommandInteraction) => Effect.Effect<void, Error>;
+  permissions?: CommandPermissions;
 };
 
 export type CommandSpec<Context> = {
   definition: CommandDefinition;
   run: (context: Context, interaction: ChatInputCommandInteraction) => Effect.Effect<void, Error>;
+  permissions?: CommandPermissions;
 };
 
 /** Keep command metadata available before runtime dependencies are constructed. */
@@ -36,8 +40,9 @@ export class CommandCatalog<Context> {
 
   bind(context: Context) {
     return new CommandRegistry(
-      this.commands.map(({ definition, run }) => ({
+      this.commands.map(({ definition, run, permissions }) => ({
         definition,
+        permissions,
         run: (interaction) => run(context, interaction),
       })),
     );
@@ -66,7 +71,18 @@ export class CommandRegistry {
 
   dispatch(interaction: ChatInputCommandInteraction) {
     const command = this.commands.get(interaction.commandName);
-    return command ? command.run(interaction) : Effect.void;
+    if (!command) return Effect.void;
+    const check = command.permissions
+      ? checkPermissions(interaction, command.permissions)
+      : Effect.void;
+    return check.pipe(
+      Effect.andThen(
+        Effect.try({
+          try: () => command.run(interaction),
+          catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+        }).pipe(Effect.flatMap((handler) => handler)),
+      ),
+    );
   }
 }
 
@@ -94,8 +110,25 @@ export const install = Effect.fn("Discord.install")(function* (
   yield* listen(
     client,
     Events.InteractionCreate,
-    (interaction) =>
-      interaction.isChatInputCommand() ? commands.dispatch(interaction) : Effect.void,
+    (interaction) => {
+      if (!interaction.isChatInputCommand()) return Effect.void;
+      return Effect.try({
+        try: () => commands.dispatch(interaction),
+        catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+      }).pipe(
+        Effect.flatMap((handler) => handler),
+        Effect.catchCause((cause) => {
+          if (Cause.hasInterrupts(cause)) return Effect.failCause(cause);
+          const failure = Cause.squash(cause);
+          const error = failure instanceof Error ? failure : new Error(String(failure));
+          const message = error instanceof PermissionDenied ? error.message : undefined;
+          const log = error instanceof PermissionDenied ? Effect.void : report(error);
+          return log.pipe(
+            Effect.andThen(notifyCommandFailure(interaction, message).pipe(Effect.catch(report))),
+          );
+        }),
+      );
+    },
     report,
   );
   for (const handler of events) yield* handler(client, report);

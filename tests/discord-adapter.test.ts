@@ -186,7 +186,8 @@ test("framework routes commands and typed events, reports failures, and removes 
         const interaction = {
           commandName: "ping",
           isChatInputCommand: () => true,
-        } as import("discord.js").Interaction;
+          reply: async () => undefined,
+        } as unknown as import("discord.js").Interaction;
         client.emit(Events.InteractionCreate, interaction);
         client.emit(Events.Error, new Error("event"));
         expect(errors).toEqual(["command failed"]);

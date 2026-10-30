@@ -1,14 +1,14 @@
 import {
   ApplicationIntegrationType,
   InteractionContextType,
-  MessageFlags,
   PermissionFlagsBits,
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { Effect, Result } from "effect";
 import { CommandCatalog } from "../../packages/discord/framework";
-import { discordRequest } from "../errors";
+import { deferEphemeral, editResponse, replyEphemeral } from "../../packages/discord/response";
+import { subcommands } from "../../packages/discord/subcommands";
 import { logError } from "../logger";
 import { RoleService } from "./RoleService";
 
@@ -34,17 +34,27 @@ const targetDefinition = new SlashCommandBuilder()
   .setIntegrationTypes(ApplicationIntegrationType.GuildInstall);
 
 const catalog = new CommandCatalog<RoleService>([
-  { definition: statusDefinition, run: (roles, interaction) => status(roles, interaction) },
+  {
+    definition: statusDefinition,
+    run: subcommands<RoleService>([
+      {
+        name: "status",
+        permissions: {
+          guildOnly: true,
+          member: PermissionFlagsBits.ManageGuild | PermissionFlagsBits.ManageRoles,
+          deniedMessage: "You need Manage Server and Manage Roles to inspect autorole settings.",
+        },
+        run: (roles, interaction) => status(roles, interaction),
+      },
+    ]),
+  },
   {
     definition: targetDefinition,
     run: (_, interaction) =>
-      discordRequest(() =>
-        interaction.reply({
-          flags: MessageFlags.Ephemeral,
-          content:
-            "This command marks the autorole configuration. A server administrator selects exactly one allowed role in Server Settings > Integrations > this bot > /autorole-target. Running this command does not assign or change any roles.",
-        }),
-      ).pipe(Effect.asVoid),
+      replyEphemeral(
+        interaction,
+        "This command marks the autorole configuration. A server administrator selects exactly one allowed role in Server Settings > Integrations > this bot > /autorole-target. Running this command does not assign or change any roles.",
+      ),
   },
 ]);
 
@@ -58,16 +68,10 @@ const status = Effect.fn("AutoroleCommands.status")(function* (
   roles: RoleService,
   interaction: ChatInputCommandInteraction,
 ) {
-  yield* discordRequest(() => interaction.deferReply({ flags: MessageFlags.Ephemeral }));
+  yield* deferEphemeral(interaction);
   const guild = interaction.guild;
   let content: string;
-  if (
-    !guild ||
-    !interaction.memberPermissions?.has([
-      PermissionFlagsBits.ManageGuild,
-      PermissionFlagsBits.ManageRoles,
-    ])
-  ) {
+  if (!guild) {
     content = "You need Manage Server and Manage Roles to inspect autorole settings.";
   } else {
     const result = yield* Effect.result(roles.getConfiguredRole(guild));
@@ -84,5 +88,5 @@ const status = Effect.fn("AutoroleCommands.status")(function* (
       content = `Autorole: <@&${result.success.id}>. Bot permissions and hierarchy are valid. New human members receive this role after membership screening. To disable, remove or deny its entry on /autorole-target in Integrations.`;
     }
   }
-  yield* discordRequest(() => interaction.editReply(content));
+  yield* editResponse(interaction, content);
 });
