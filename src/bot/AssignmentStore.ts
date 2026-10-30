@@ -29,13 +29,13 @@ const decode = (job: Job) =>
     nextAttempt: job.nextAttempt,
   });
 
+function storageError(operation: string, error: unknown) {
+  const cause = error instanceof JobStorageError ? error.cause : error;
+  return new StorageError({ operation, cause, message: asError(cause).message });
+}
+
 function storageOperation<A>(operation: string, effect: Effect.Effect<A, unknown>) {
-  return effect.pipe(
-    Effect.mapError((error) => {
-      const cause = error instanceof JobStorageError ? error.cause : error;
-      return new StorageError({ operation, cause, message: asError(cause).message });
-    }),
-  );
+  return effect.pipe(Effect.mapError((error) => storageError(operation, error)));
 }
 
 export class AssignmentStore {
@@ -50,16 +50,7 @@ export class AssignmentStore {
         throw new Error(
           "Legacy assignments table found. Migrate or reconcile it before starting the bot.",
         );
-    }).pipe(
-      Effect.mapError(
-        (error) =>
-          new StorageError({
-            operation: error.operation,
-            cause: error.cause,
-            message: asError(error.cause).message,
-          }),
-      ),
-    );
+    }).pipe(Effect.mapError((error) => storageError(error.operation, error)));
     return new AssignmentStore(jobs);
   });
 

@@ -135,3 +135,41 @@ test("legacy assignment tables stop startup without changing stored records", as
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("invalid persisted jobs report the operation without hiding the cause", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "autorole-invalid-job-"));
+  const path = join(directory, "assignments.sqlite");
+  try {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const store = yield* AssignmentStore.make(path);
+          yield* store.recordJoin(observed);
+        }),
+      ),
+    );
+    const db = new Database(path);
+    db.run("UPDATE jobs SET payload = '{invalid'");
+    db.close();
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const store = yield* AssignmentStore.make(path);
+          for (const [operation, effect] of [
+            ["get", store.get("guild", "member").pipe(Effect.asVoid)],
+            ["due", store.due(0).pipe(Effect.asVoid)],
+          ] as const) {
+            const result = yield* Effect.result(effect);
+            expect(Result.isFailure(result)).toBe(true);
+            if (Result.isFailure(result)) {
+              expect(result.failure.operation).toBe(operation);
+              expect(result.failure.cause).toBeInstanceOf(Error);
+            }
+          }
+        }),
+      ),
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

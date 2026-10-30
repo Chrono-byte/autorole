@@ -28,10 +28,13 @@ export class OutstandingAssignments {
     defer: (entry, nextAttempt) => this.store.defer(entry, nextAttempt),
     attempt: (entry) =>
       this.attempt(entry).pipe(
-        Effect.catchTag("ConfigurationError", (error) => this.retry(entry, error)),
-        Effect.catchTag("DiscordRequestError", (error) => {
-          if (this.worker.isStopped) return Effect.succeed({ type: "skip" as const });
-          if (error.code === 10007) return Effect.succeed({ type: "complete" as const });
+        Effect.catchTag(["ConfigurationError", "DiscordRequestError"], (error) => {
+          if (
+            !this.worker.isStopped &&
+            error instanceof DiscordRequestError &&
+            error.code === 10007
+          )
+            return Effect.succeed({ type: "complete" as const });
           return this.retry(entry, error);
         }),
       ),
