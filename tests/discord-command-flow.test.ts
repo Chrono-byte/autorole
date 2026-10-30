@@ -262,7 +262,7 @@ test("interrupting a command does not send an error response", async () => {
 });
 
 test("autorole status denies missing permissions through its subcommand route", async () => {
-  const { makeCommandRegistry } = await import("../src/bot/AutoroleCommands");
+  const { makeCommandRegistry } = await import("../src/bot/commands/AutoroleCommands");
   const { RoleService } = await import("../src/bot/RoleService");
   const client = new Client({ intents: [] });
   const delivered = Promise.withResolvers<void>();

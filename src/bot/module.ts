@@ -1,8 +1,8 @@
 import { Events, type Client } from "discord.js";
 import { Effect } from "effect";
 import { event } from "@autorole/discord-framework";
-import { makeCommandRegistry } from "./AutoroleCommands";
-import { OutstandingAssignments } from "./OutstandingAssignments";
+import { makeCommandRegistry } from "./commands/AutoroleCommands";
+import { OutstandingAssignments } from "./assignments/OutstandingAssignments";
 import { RoleService } from "./RoleService";
 
 export const makeAutorole = Effect.fn("Autorole.make")(function* (

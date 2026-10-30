@@ -14,10 +14,10 @@ import {
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { tryPromise } from "../src/effectful";
-import { OutstandingAssignments } from "../src/bot/OutstandingAssignments";
+import { OutstandingAssignments } from "../src/bot/assignments/OutstandingAssignments";
 import { readConfiguration } from "../src/config/Configuration";
 import { RoleService } from "../src/bot/RoleService";
-import { commandDefinitions, makeCommandRegistry } from "../src/bot/AutoroleCommands";
+import { commandDefinitions, makeCommandRegistry } from "../src/bot/commands/AutoroleCommands";
 import { makeAutorole } from "../src/bot/module";
 import { install } from "@autorole/discord-framework";
 

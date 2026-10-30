@@ -1,10 +1,15 @@
 import { type Client, type GuildMember, type PartialGuildMember } from "discord.js";
 import { Effect } from "effect";
-import { JobWorker, type JobOutcome } from "../../packages/jobs/worker";
-import { ConfigurationError, DiscordRequestError, StorageError, discordRequest } from "../errors";
-import { logError } from "../logger";
+import { JobWorker, type JobOutcome } from "../../../packages/jobs/worker";
+import {
+  ConfigurationError,
+  DiscordRequestError,
+  StorageError,
+  discordRequest,
+} from "../../errors";
+import { logError } from "../../logger";
 import { AssignmentStore, assignmentKey, type Assignment } from "./AssignmentStore";
-import { RoleService } from "./RoleService";
+import { RoleService } from "../RoleService";
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;

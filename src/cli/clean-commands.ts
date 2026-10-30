@@ -1,6 +1,6 @@
 import { ApplicationCommandType, REST, Routes } from "discord.js";
 import { Effect, Schema } from "effect";
-import { commandDefinitions } from "../bot/AutoroleCommands";
+import { commandDefinitions } from "../bot/commands/AutoroleCommands";
 import { readConfiguration, type Configuration } from "../config/Configuration";
 import { trySync } from "../effectful";
 import { ConfigurationError, discordRequest } from "../errors";

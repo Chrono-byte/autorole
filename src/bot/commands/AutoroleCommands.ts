@@ -13,8 +13,8 @@ import {
   replyEphemeral,
   subcommands,
 } from "@autorole/discord-framework";
-import { logError } from "../logger";
-import { RoleService } from "./RoleService";
+import { logError } from "../../logger";
+import { RoleService } from "../RoleService";
 
 const statusDefinition = new SlashCommandBuilder()
   .setName("autorole")

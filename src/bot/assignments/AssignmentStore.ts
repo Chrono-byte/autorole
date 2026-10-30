@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
-import { JobStorageError, JobStore, type Job } from "../../packages/jobs/store";
-import { asError } from "../effectful";
-import { StorageError } from "../errors";
+import { JobStorageError, JobStore, type Job } from "../../../packages/jobs/store";
+import { asError } from "../../effectful";
+import { StorageError } from "../../errors";
 
 const Assignment = Schema.Struct({
   guildId: Schema.String,

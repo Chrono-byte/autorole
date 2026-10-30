@@ -2,7 +2,11 @@ import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { JobWorker, type JobOutcome } from "../packages/jobs/worker";
-import { AssignmentStore, assignmentKey, type Assignment } from "../src/bot/AssignmentStore";
+import {
+  AssignmentStore,
+  assignmentKey,
+  type Assignment,
+} from "../src/bot/assignments/AssignmentStore";
 
 const join = { guildId: "guild", memberId: "member", joinedAt: 123, screeningComplete: 0 };
 
