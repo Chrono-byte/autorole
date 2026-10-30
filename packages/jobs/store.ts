@@ -72,13 +72,24 @@ export class JobStore {
     );
   }
 
+  /** Update a numeric JSON field. The field must be a nonempty path segment without dots, quotes, brackets, or control characters. */
   patch(identity: JobIdentity, field: string, value: number) {
-    return operation("patch", () =>
-      this.db.run(
+    return operation("patch", () => {
+      if (
+        !field ||
+        [...field].some(
+          (char) =>
+            '."[]'.includes(char) ||
+            char.charCodeAt(0) < 32 ||
+            (char.charCodeAt(0) >= 127 && char.charCodeAt(0) <= 159),
+        )
+      )
+        throw new RangeError("field must be a safe JSON path segment");
+      return this.db.run(
         "UPDATE jobs SET payload = json_set(payload, ?, ?) WHERE key = ? AND generation = ?",
         [`$.${field}`, value, identity.key, identity.generation],
-      ),
-    );
+      );
+    });
   }
 
   remove(identity: JobIdentity) {
