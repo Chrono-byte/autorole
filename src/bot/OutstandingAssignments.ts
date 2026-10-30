@@ -1,6 +1,6 @@
 import { type Client, type GuildMember, type PartialGuildMember } from "discord.js";
-import { DateTime, Effect } from "effect";
-import { JobWorker } from "../../packages/jobs/worker";
+import { Effect } from "effect";
+import { JobWorker, type JobOutcome } from "../../packages/jobs/worker";
 import { ConfigurationError, DiscordRequestError, StorageError, discordRequest } from "../errors";
 import { logError } from "../logger";
 import { AssignmentStore, assignmentKey, type Assignment } from "./AssignmentStore";
@@ -24,12 +24,14 @@ export class OutstandingAssignments {
     key: (entry) => assignmentKey(entry.guildId, entry.memberId),
     due: (now) => this.store.due(now),
     reload: (entry) => this.store.get(entry.guildId, entry.memberId),
+    complete: (entry) => this.store.remove(entry),
+    defer: (entry, nextAttempt) => this.store.defer(entry, nextAttempt),
     attempt: (entry) =>
       this.attempt(entry).pipe(
         Effect.catchTag("ConfigurationError", (error) => this.retry(entry, error)),
         Effect.catchTag("DiscordRequestError", (error) => {
-          if (this.worker.isStopped) return Effect.void;
-          if (error.code === 10007) return this.store.remove(entry);
+          if (this.worker.isStopped) return Effect.succeed({ type: "skip" as const });
+          if (error.code === 10007) return Effect.succeed({ type: "complete" as const });
           return this.retry(entry, error);
         }),
       ),
@@ -128,28 +130,22 @@ export class OutstandingAssignments {
     const member = yield* discordRequest(() =>
       guild.members.fetch({ user: entry.memberId, force: true }),
     );
-    if (this.worker.isStopped) return;
-    if (member.joinedTimestamp !== entry.joinedAt) {
-      yield* this.store.remove(entry);
-      return;
-    }
+    if (this.worker.isStopped) return { type: "skip" } as const;
+    if (member.joinedTimestamp !== entry.joinedAt) return { type: "complete" } as const;
     const latest = yield* this.store.get(entry.guildId, entry.memberId);
-    if (!latest || latest.joinedAt !== entry.joinedAt) return;
+    if (!latest || latest.joinedAt !== entry.joinedAt) return { type: "skip" } as const;
     const result = yield* this.roles.assign(member, latest.screeningComplete === 1);
-    if (result === "complete") yield* this.store.remove(entry);
-    else yield* this.defer(entry, retryDelay(entry, result));
+    if (result === "complete") return { type: "complete" } as const;
+    return { type: "retry", delay: retryDelay(entry, result) } as const;
   });
 
-  private retry(entry: Assignment, error: ConfigurationError | DiscordRequestError) {
-    if (this.worker.isStopped) return Effect.void;
+  private retry(
+    entry: Assignment,
+    error: ConfigurationError | DiscordRequestError,
+  ): Effect.Effect<JobOutcome> {
+    if (this.worker.isStopped) return Effect.succeed({ type: "skip" as const });
     return this.report(error, entry.guildId, entry.memberId).pipe(
-      Effect.andThen(this.defer(entry, retryDelay(entry, error))),
-    );
-  }
-
-  private defer(entry: Assignment, delay: number) {
-    return DateTime.now.pipe(
-      Effect.flatMap((now) => this.store.defer(entry, DateTime.toEpochMillis(now) + delay)),
+      Effect.as({ type: "retry" as const, delay: retryDelay(entry, error) }),
     );
   }
 }

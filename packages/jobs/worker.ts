@@ -1,6 +1,8 @@
 import { DateTime, Effect, Schedule } from "effect";
 import { JobCoordinator } from "./coordinator";
 
+export type JobOutcome = { type: "complete" } | { type: "retry"; delay: number } | { type: "skip" };
+
 /** Runs due jobs and coalesces observations for each key in a single process. */
 export class JobWorker<A, E> {
   private readonly coordinator = new JobCoordinator();
@@ -10,7 +12,9 @@ export class JobWorker<A, E> {
       key: (job: A) => string;
       due: (now: number) => Effect.Effect<readonly A[], E>;
       reload: (job: A) => Effect.Effect<A | null, E>;
-      attempt: (job: A) => Effect.Effect<void, E>;
+      attempt: (job: A) => Effect.Effect<JobOutcome, E>;
+      complete: (job: A) => Effect.Effect<void, E>;
+      defer: (job: A, nextAttempt: number) => Effect.Effect<void, E>;
     },
   ) {}
 
@@ -43,7 +47,18 @@ export class JobWorker<A, E> {
   }
 
   run(job: A, observed = false): Effect.Effect<void, E> {
-    return this.coordinator.run(this.options.key(job), observed, this.options.attempt(job), () =>
+    const attempt = this.options.attempt(job).pipe(
+      Effect.flatMap((outcome) => {
+        if (outcome.type === "skip") return Effect.void;
+        if (outcome.type === "complete") return this.options.complete(job);
+        return DateTime.now.pipe(
+          Effect.flatMap((now) =>
+            this.options.defer(job, DateTime.toEpochMillis(now) + outcome.delay),
+          ),
+        );
+      }),
+    );
+    return this.coordinator.run(this.options.key(job), observed, attempt, () =>
       this.options
         .reload(job)
         .pipe(Effect.flatMap((latest) => (latest ? this.run(latest) : Effect.void))),
