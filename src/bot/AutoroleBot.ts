@@ -1,6 +1,12 @@
-import { GatewayIntentBits } from "discord.js";
-import { Effect } from "effect";
-import { runBot } from "@autorole/discord-framework";
+import { Events, GatewayIntentBits } from "discord.js";
+import { Deferred, Effect } from "effect";
+import {
+  discordRequest,
+  event,
+  install,
+  makeClient,
+  rotatePresence,
+} from "@autorole/discord-framework";
 import { makeAutorole } from "./module";
 import { asError } from "../effectful";
 import { DiscordRequestError } from "../errors";
@@ -29,40 +35,62 @@ const overwatchStatuses = [
   "egg",
 ] satisfies [string, ...string[]];
 
-export function runAutorole(configuration: Configuration) {
-  return runBot({
-    token: configuration.token,
-    client: { intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] },
-    modules: [
-      (client) =>
-        makeAutorole(client, {
-          path:
-            process.env.AUTOROLE_STATE_PATH ||
-            (process.env.STATE_DIRECTORY
-              ? `${process.env.STATE_DIRECTORY}/assignments.sqlite`
-              : "./data/assignments.sqlite"),
-          guildId: configuration.guildId,
-          report: (error, guildId, memberId) =>
-            logError("autorole_assignment_error", {
-              guildId,
-              memberId,
-              code: error instanceof DiscordRequestError ? error.code : undefined,
-              message: asError(error).message,
-            }),
-        }),
-    ],
-    presence: { name: "Overwatch", statuses: overwatchStatuses, interval: MINUTE_MS },
-    ready: (client) =>
-      logInfo("autorole_connected", { user: client.user.tag }).pipe(Effect.andThen(notifyReady())),
-    readyFailed: (error) =>
-      logError("autorole_ready_notification_failed", { message: error.message }).pipe(
-        Effect.andThen(
-          Effect.sync(() => {
-            process.exitCode = 1;
-          }),
-        ),
-      ),
-    reportHandler,
-    reportDiscord: (error) => logError("autorole_error", { message: error.message }),
+export const runAutorole = Effect.fn("Autorole.run")(function* (configuration: Configuration) {
+  const scope = yield* Effect.scope;
+  const shutdown = yield* Deferred.make<void>();
+  const client = yield* makeClient(
+    { intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] },
+    (discordClient) => discordRequest(() => discordClient.destroy()).pipe(Effect.ignore),
+  );
+  const autorole = yield* makeAutorole(client, {
+    path:
+      process.env.AUTOROLE_STATE_PATH ||
+      (process.env.STATE_DIRECTORY
+        ? `${process.env.STATE_DIRECTORY}/assignments.sqlite`
+        : "./data/assignments.sqlite"),
+    guildId: configuration.guildId,
+    report: (error, guildId, memberId) =>
+      logError("autorole_assignment_error", {
+        guildId,
+        memberId,
+        code: error instanceof DiscordRequestError ? error.code : undefined,
+        message: asError(error).message,
+      }),
   });
-}
+  yield* install(
+    client,
+    autorole.commands,
+    [
+      ...autorole.events,
+      event(
+        Events.ClientReady,
+        (readyClient) =>
+          Effect.gen(function* () {
+            yield* Effect.forkIn(scope, { startImmediately: true })(autorole.start);
+            yield* Effect.forkIn(scope, { startImmediately: true })(
+              rotatePresence(readyClient, "Overwatch", overwatchStatuses, MINUTE_MS),
+            );
+            yield* logInfo("autorole_connected", { user: readyClient.user.tag });
+            yield* notifyReady().pipe(
+              Effect.catch((error) =>
+                Effect.gen(function* () {
+                  yield* logError("autorole_ready_notification_failed", {
+                    message: error.message,
+                  });
+                  yield* Effect.sync(() => {
+                    process.exitCode = 1;
+                  });
+                  yield* Deferred.succeed(shutdown, undefined);
+                }),
+              ),
+            );
+          }),
+        { once: true },
+      ),
+      event(Events.Error, (error) => logError("autorole_error", { message: error.message })),
+    ],
+    reportHandler,
+  );
+  yield* discordRequest(() => client.login(configuration.token));
+  yield* Deferred.await(shutdown);
+});

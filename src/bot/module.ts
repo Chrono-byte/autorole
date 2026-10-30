@@ -13,7 +13,6 @@ export const makeAutorole = Effect.fn("Autorole.make")(function* (
     report: (error: unknown, guildId: string, memberId: string) => Effect.Effect<void>;
   },
 ) {
-  const scope = yield* Effect.scope;
   const roles = new RoleService(options.guildId);
   const assignments = yield* OutstandingAssignments.make(
     options.path,
@@ -24,13 +23,8 @@ export const makeAutorole = Effect.fn("Autorole.make")(function* (
   );
   return {
     commands: makeCommandRegistry(roles),
+    start: assignments.start(),
     events: [
-      event(
-        Events.ClientReady,
-        () =>
-          Effect.forkIn(scope, { startImmediately: true })(assignments.start()).pipe(Effect.asVoid),
-        { once: true },
-      ),
       event(Events.GuildMemberAdd, (member) => assignments.observeJoin(member)),
       event(Events.GuildMemberUpdate, (before, member) =>
         before.pending && !member.pending ? assignments.observe(member) : Effect.void,
