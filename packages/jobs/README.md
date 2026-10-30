@@ -4,4 +4,4 @@ A Bun SQLite job store and an in-process, per-key coordinator. Jobs have a key, 
 
 The worker owns polling and per-key coordination. The caller owns retry policy, payload validation, and job execution. The coordinator coalesces observations during an attempt into a follow-up check. It does not coordinate across processes: run only one bot instance per database. SQLite persistence does not make external side effects exactly once; handlers must tolerate retries.
 
-The assignment adapter migrates the old `assignments` table to `jobs` in a transaction. This is a one-way schema migration: an older bot version will not read the migrated jobs. Back up the state database before deployment if rollback is needed.
+The bot uses the `jobs` schema. Older bot versions do not read it, so rolling back requires reconciling the database as well as restoring the executable. If an old `assignments` table exists, the bot refuses to start rather than silently ignore outstanding assignments.

@@ -40,14 +40,6 @@ export const listen = Effect.fn("Discord.listen")(function* <K extends keyof Cli
   );
 });
 
-export function handlers(client: Client, report: (error: Error) => Effect.Effect<void>) {
-  return <K extends keyof ClientEvents>(
-    event: K,
-    handler: (...args: ClientEvents[K]) => Effect.Effect<void, Error>,
-    once = false,
-  ) => listen(client, event, handler, report, once);
-}
-
 /** Acquire a client, install its behavior, log in, and stay alive until stopped. */
 export const runClient = Effect.fn("Discord.runClient")(function* (
   options: ClientOptions,

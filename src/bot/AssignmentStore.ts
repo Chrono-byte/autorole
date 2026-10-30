@@ -46,14 +46,10 @@ export class AssignmentStore {
       const exists = db
         .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'assignments'")
         .get();
-      if (!exists) return;
-      const columns = db.query<{ name: string }, []>("PRAGMA table_info(assignments)").all();
-      if (!columns.some((column) => column.name === "screeningComplete"))
-        db.run("ALTER TABLE assignments ADD COLUMN screeningComplete INTEGER NOT NULL DEFAULT 0");
-      db.run(
-        "INSERT INTO jobs (key, generation, payload, attempts, nextAttempt) SELECT json_array(guildId, memberId), joinedAt, json_object('guildId', guildId, 'memberId', memberId, 'screeningComplete', screeningComplete), attempts, nextAttempt FROM assignments",
-      );
-      db.run("DROP TABLE assignments");
+      if (exists)
+        throw new Error(
+          "Legacy assignments table found. Migrate or reconcile it before starting the bot.",
+        );
     }).pipe(
       Effect.mapError(
         (error) =>
