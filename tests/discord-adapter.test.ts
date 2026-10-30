@@ -309,24 +309,26 @@ test("bot runner starts module before readiness and shuts down on readiness fail
         runBot({
           token: "token",
           client: { intents: [] },
-          setup: (client) =>
-            Effect.sync(() => {
-              runningClient = client;
-              calls.push("setup");
-              return {
-                commands: new CommandRegistry([]),
-                events: [
-                  event(
-                    Events.ClientReady,
-                    () =>
-                      Effect.sync(() => {
-                        calls.push("module ready");
-                      }),
-                    { once: true },
-                  ),
-                ],
-              };
-            }),
+          modules: [
+            (client) =>
+              Effect.sync(() => {
+                runningClient = client;
+                calls.push("setup");
+                return {
+                  commands: new CommandRegistry([]),
+                  events: [
+                    event(
+                      Events.ClientReady,
+                      () =>
+                        Effect.sync(() => {
+                          calls.push("module ready");
+                        }),
+                      { once: true },
+                    ),
+                  ],
+                };
+              }),
+          ],
           ready: () =>
             Effect.sync(() => {
               calls.push("ready");
@@ -350,6 +352,126 @@ test("bot runner starts module before readiness and shuts down on readiness fail
     ]);
     expect(runningClient?.listenerCount(Events.ClientReady)).toBe(0);
     expect(runningClient?.listenerCount(Events.InteractionCreate)).toBe(0);
+  } finally {
+    login.mockRestore();
+    destroy.mockRestore();
+  }
+});
+
+test("modules combine commands and events while rejecting duplicate command names", async () => {
+  const { Client } = await import("discord.js");
+  const { CommandRegistry, composeModules, event, install } = await import("../packages/discord");
+  const client = new Client({ intents: [] });
+  const calls: string[] = [];
+  const first = {
+    commands: new CommandRegistry([
+      {
+        definition: { name: "first", toJSON: () => ({ name: "first" }) },
+        run: () =>
+          Effect.sync(() => {
+            calls.push("first command");
+          }),
+      },
+    ]),
+    events: [
+      event(Events.Error, () =>
+        Effect.sync(() => {
+          calls.push("first event");
+        }),
+      ),
+    ],
+  };
+  const second = {
+    commands: new CommandRegistry([
+      {
+        definition: { name: "second", toJSON: () => ({ name: "second" }) },
+        run: () =>
+          Effect.sync(() => {
+            calls.push("second command");
+          }),
+      },
+    ]),
+    events: [
+      event(Events.Error, () =>
+        Effect.sync(() => {
+          calls.push("second event");
+        }),
+      ),
+    ],
+  };
+  const combined = composeModules([first, second]);
+  expect(combined.commands.definitions.map((definition) => definition.name)).toEqual([
+    "first",
+    "second",
+  ]);
+  expect(() => composeModules([first, first])).toThrow("Duplicate command: first");
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* install(client, combined.commands, combined.events, () => Effect.void);
+        for (const commandName of ["first", "second"]) {
+          client.emit(Events.InteractionCreate, {
+            commandName,
+            isChatInputCommand: () => true,
+          } as import("discord.js").Interaction);
+        }
+        client.emit(Events.Error, new Error("test"));
+        expect(calls).toEqual(["first command", "second command", "first event", "second event"]);
+      }),
+    ),
+  );
+  expect(client.listenerCount(Events.Error)).toBe(0);
+  expect(client.listenerCount(Events.InteractionCreate)).toBe(0);
+  await client.destroy();
+});
+
+test("conflicting modules fail before login and release acquired resources", async () => {
+  const { Client } = await import("discord.js");
+  const { CommandRegistry, runBot } = await import("../packages/discord");
+  const calls: string[] = [];
+  const login = spyOn(Client.prototype, "login").mockImplementation(async () => {
+    calls.push("login");
+    return "token";
+  });
+  const destroy = spyOn(Client.prototype, "destroy").mockImplementation(async () => {
+    calls.push("destroy");
+  });
+  const module = () =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        calls.push("acquire");
+        return {
+          commands: new CommandRegistry([
+            {
+              definition: { name: "same", toJSON: () => ({ name: "same" }) },
+              run: () => Effect.void,
+            },
+          ]),
+          events: [],
+        };
+      }),
+      () =>
+        Effect.sync(() => {
+          calls.push("release");
+        }),
+    );
+  try {
+    await expect(
+      Effect.runPromise(
+        Effect.scoped(
+          runBot({
+            token: "token",
+            client: { intents: [] },
+            modules: [module, module],
+            ready: () => Effect.void,
+            readyFailed: () => Effect.void,
+            reportHandler: () => Effect.void,
+            reportDiscord: () => Effect.void,
+          }),
+        ),
+      ),
+    ).rejects.toThrow("Duplicate command: same");
+    expect(calls).toEqual(["acquire", "acquire", "release", "release", "destroy"]);
   } finally {
     login.mockRestore();
     destroy.mockRestore();

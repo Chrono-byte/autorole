@@ -3,10 +3,12 @@ export { commandPermissions, upsertCommands } from "./commands";
 export {
   CommandCatalog,
   CommandRegistry,
+  composeModules,
   event,
   install,
   runBot,
   type BotModule,
+  type BotModuleFactory,
   type Command,
   type CommandDefinition,
   type CommandSpec,

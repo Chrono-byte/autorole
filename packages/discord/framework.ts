@@ -48,6 +48,10 @@ export class CommandCatalog<Context> {
 export class CommandRegistry {
   private readonly commands = new Map<string, Command>();
 
+  static combine(registries: readonly CommandRegistry[]) {
+    return new CommandRegistry(registries.flatMap((registry) => [...registry.commands.values()]));
+  }
+
   constructor(commands: readonly Command[]) {
     for (const command of commands) {
       const name = command.definition.name;
@@ -102,11 +106,23 @@ export type BotModule = {
   events: readonly EventHandler[];
 };
 
-/** Own the Discord lifecycle and install one bot's scoped behavior. */
+export type BotModuleFactory = (
+  client: Client,
+) => Effect.Effect<BotModule, Error, import("effect").Scope.Scope>;
+
+/** Combine modules before installing listeners, rejecting conflicting commands. */
+export function composeModules(modules: readonly BotModule[]): BotModule {
+  return {
+    commands: CommandRegistry.combine(modules.map((module) => module.commands)),
+    events: modules.flatMap((module) => module.events),
+  };
+}
+
+/** Own the Discord lifecycle and install scoped modules in declaration order. */
 export const runBot = Effect.fn("Discord.runBot")(function* (options: {
   token: string;
   client: import("discord.js").ClientOptions;
-  setup: (client: Client) => Effect.Effect<BotModule, Error, import("effect").Scope.Scope>;
+  modules: readonly BotModuleFactory[];
   reportHandler: Report;
   reportDiscord: Report;
   ready: (client: Client<true>) => Effect.Effect<void, Error>;
@@ -120,7 +136,12 @@ export const runBot = Effect.fn("Discord.runBot")(function* (options: {
     (client) =>
       Effect.gen(function* () {
         const scope = yield* Effect.scope;
-        const module = yield* options.setup(client);
+        const modules: BotModule[] = [];
+        for (const make of options.modules) modules.push(yield* make(client));
+        const module = yield* Effect.try({
+          try: () => composeModules(modules),
+          catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+        });
         yield* install(
           client,
           module.commands,
