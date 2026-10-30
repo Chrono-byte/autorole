@@ -5,7 +5,7 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runAutorole } from "../src/bot/AutoroleBot";
-import { JobWorker } from "../packages/jobs/worker";
+import { JobWorker } from "@autorole/jobs";
 
 const configuration = { token: "fixture", applicationId: "100000000000000001", guildId: undefined };
 

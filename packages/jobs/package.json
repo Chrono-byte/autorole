@@ -1,0 +1,12 @@
+{
+  "name": "@autorole/jobs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.7"
+  }
+}

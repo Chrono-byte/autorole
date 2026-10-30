@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { JobWorker, type JobOutcome } from "../packages/jobs/worker";
+import { JobWorker, type JobOutcome } from "@autorole/jobs";
 import {
   AssignmentStore,
   assignmentKey,

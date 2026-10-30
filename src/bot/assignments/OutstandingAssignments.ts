@@ -1,6 +1,6 @@
 import { type Client, type GuildMember, type PartialGuildMember } from "discord.js";
 import { Effect } from "effect";
-import { JobWorker, type JobOutcome } from "../../../packages/jobs/worker";
+import { JobWorker, type JobOutcome } from "@autorole/jobs";
 import {
   ConfigurationError,
   DiscordRequestError,

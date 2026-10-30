@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { JobStorageError, JobStore, type Job } from "../../../packages/jobs/store";
+import { JobStorageError, JobStore, type Job } from "@autorole/jobs";
 import { asError } from "../../effectful";
 import { StorageError } from "../../errors";
 
