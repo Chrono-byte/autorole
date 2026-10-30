@@ -1,31 +1,10 @@
-import { PermissionFlagsBits, type Guild, type GuildMember, type Role } from "discord.js";
+import { type Guild, type GuildMember } from "discord.js";
 import { Effect } from "effect";
+import { roleAssignability } from "../../packages/discord/roles";
 import { IntegrationSettings } from "../config/IntegrationSettings";
 import { ConfigurationError, discordRequest } from "../errors";
 export class RoleService {
   constructor(private readonly settings: IntegrationSettings) {}
-
-  private validate = Effect.fn("RoleService.validate")(function* (
-    this: RoleService,
-    guild: Guild,
-    role: Role,
-  ) {
-    const bot = yield* discordRequest(() => guild.members.fetchMe());
-    if (!bot.permissions.has(PermissionFlagsBits.ManageRoles))
-      return yield* Effect.fail(
-        new ConfigurationError({ message: "Give the bot Manage Roles permission." }),
-      );
-    if (role.id === guild.id || role.managed)
-      return yield* Effect.fail(
-        new ConfigurationError({
-          message: "Choose a regular role, not @everyone or an integration role.",
-        }),
-      );
-    if (bot.roles.highest.comparePositionTo(role) <= 0)
-      return yield* Effect.fail(
-        new ConfigurationError({ message: "Move the bot's highest role above the selected role." }),
-      );
-  });
 
   assign = Effect.fn("RoleService.assign")(function* (
     this: RoleService,
@@ -58,7 +37,13 @@ export class RoleService {
             "The selected role was deleted. Select another role in Integrations > /autorole-target.",
         }),
       );
-    yield* this.validate(guild, role);
+    const problem = yield* roleAssignability(guild, role);
+    const messages = {
+      "missing-permission": "Give the bot Manage Roles permission.",
+      "managed-role": "Choose a regular role, not @everyone or an integration role.",
+      hierarchy: "Move the bot's highest role above the selected role.",
+    };
+    if (problem) return yield* new ConfigurationError({ message: messages[problem] });
     return role;
   });
 }

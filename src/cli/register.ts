@@ -1,25 +1,23 @@
-import { REST, Routes } from "discord.js";
+import { REST } from "discord.js";
 import { Effect } from "effect";
+import { upsertCommands } from "../../packages/discord/commands";
 import { readConfiguration, type Configuration } from "../config/Configuration";
 import { AutoroleCommands } from "../bot/AutoroleCommands";
 import { trySync } from "../effectful";
-import { discordRequest } from "../errors";
 import { runMain } from "../runMain";
 
 class CommandRegistrar {
   constructor(private readonly config: Configuration) {}
 
   register(): Effect.Effect<void, Error> {
-    const route = this.config.guildId
-      ? Routes.applicationGuildCommands(this.config.applicationId, this.config.guildId)
-      : Routes.applicationCommands(this.config.applicationId);
-    // Upserting by name preserves unrelated commands and existing permission selections.
-    const definitions = AutoroleCommands.definitions;
     return Effect.gen({ self: this }, function* () {
       const rest = yield* trySync(() => new REST({ version: "10" }).setToken(this.config.token));
-      for (const definition of definitions) {
-        yield* discordRequest((signal) => rest.post(route, { body: definition.toJSON(), signal }));
-      }
+      yield* upsertCommands(
+        rest,
+        this.config.applicationId,
+        this.config.guildId,
+        AutoroleCommands.definitions,
+      );
       yield* Effect.sync(() =>
         process.stdout.write(
           "Registered /autorole and /autorole-target. Select the target role in Server Settings > Integrations.\n",

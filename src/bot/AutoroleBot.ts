@@ -1,6 +1,7 @@
-import { ActivityType, Events, GatewayIntentBits } from "discord.js";
-import { Deferred, Effect, Schedule } from "effect";
-import { listen, makeClient } from "../../packages/discord/client";
+import { Events, GatewayIntentBits } from "discord.js";
+import { Deferred, Effect } from "effect";
+import { handlers, makeClient } from "../../packages/discord/client";
+import { rotatePresence } from "../../packages/discord/presence";
 import { asError } from "../effectful";
 import { DiscordRequestError, discordRequest } from "../errors";
 import { type Configuration } from "../config/Configuration";
@@ -62,28 +63,14 @@ export class AutoroleBot {
         configuration.guildId,
       );
       const commands = new AutoroleCommands(roles);
-      yield* listen(
-        client,
+      const on = handlers(client, reportHandler);
+      yield* on(
         Events.ClientReady,
         (readyClient) =>
           Effect.gen(function* () {
             yield* Effect.forkIn(scope, { startImmediately: true })(assignments.start());
-            let statusIndex = 0;
-            const updatePresence = Effect.sync(() => {
-              readyClient.user.setPresence({
-                activities: [
-                  {
-                    name: "Overwatch",
-                    type: ActivityType.Custom,
-                    state: overwatchStatuses[statusIndex] ?? overwatchStatuses[0],
-                  },
-                ],
-                status: "online",
-              });
-              statusIndex = (statusIndex + 1) % overwatchStatuses.length;
-            });
             yield* Effect.forkIn(scope, { startImmediately: true })(
-              updatePresence.pipe(Effect.repeat(Schedule.spaced(MINUTE_MS)), Effect.asVoid),
+              rotatePresence(readyClient, "Overwatch", overwatchStatuses, MINUTE_MS),
             );
             yield* logInfo("autorole_connected", { user: readyClient.user.tag });
             yield* notifyReady().pipe(
@@ -98,41 +85,17 @@ export class AutoroleBot {
               ),
             );
           }),
-        reportHandler,
         true,
       );
-      yield* listen(
-        client,
-        Events.GuildMemberAdd,
-        (member) => assignments.observeJoin(member),
-        reportHandler,
+      yield* on(Events.GuildMemberAdd, (member) => assignments.observeJoin(member));
+      yield* on(Events.GuildMemberUpdate, (before, member) =>
+        before.pending && !member.pending ? assignments.observe(member) : Effect.void,
       );
-      yield* listen(
-        client,
-        Events.GuildMemberUpdate,
-        (before, member) =>
-          before.pending && !member.pending ? assignments.observe(member) : Effect.void,
-        reportHandler,
+      yield* on(Events.GuildMemberAvailable, (member) => assignments.observe(member));
+      yield* on(Events.InteractionCreate, (interaction) =>
+        interaction.isChatInputCommand() ? commands.execute(interaction) : Effect.void,
       );
-      yield* listen(
-        client,
-        Events.GuildMemberAvailable,
-        (member) => assignments.observe(member),
-        reportHandler,
-      );
-      yield* listen(
-        client,
-        Events.InteractionCreate,
-        (interaction) =>
-          interaction.isChatInputCommand() ? commands.execute(interaction) : Effect.void,
-        reportHandler,
-      );
-      yield* listen(
-        client,
-        Events.Error,
-        (error) => logError("autorole_error", { message: error.message }),
-        reportHandler,
-      );
+      yield* on(Events.Error, (error) => logError("autorole_error", { message: error.message }));
       yield* discordRequest(() => client.login(configuration.token));
       yield* Deferred.await(shutdown);
     });

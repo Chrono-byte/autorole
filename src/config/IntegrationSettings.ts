@@ -4,7 +4,8 @@ import {
   type Guild,
 } from "discord.js";
 import { Effect } from "effect";
-import { ConfigurationError, discordRequest } from "../errors";
+import { commandPermissions } from "../../packages/discord/commands";
+import { ConfigurationError } from "../errors";
 
 export class IntegrationSettings {
   constructor(private readonly guildId: string | undefined) {}
@@ -15,21 +16,14 @@ export class IntegrationSettings {
   ) {
     const guildId = this.guildId;
     if (guildId && guildId !== guild.id) return null;
-    const application = guild.client.application;
-    if (!application)
-      return yield* Effect.fail(
-        new ConfigurationError({ message: "Discord application is not ready." }),
-      );
-    const commands = yield* discordRequest(() =>
-      guildId ? guild.commands.fetch() : application.commands.fetch(),
-    );
-    const target = commands.find((command) => command.name === "autorole-target");
-    if (!target)
-      return yield* Effect.fail(
-        new ConfigurationError({ message: "Run bun run register to register /autorole-target." }),
-      );
-    const permissions = yield* discordRequest(() => guild.commands.permissions.fetch({}));
-    return yield* IntegrationSettings.selectRole(guild.id, permissions.get(target.id) ?? []);
+    const result = yield* commandPermissions(guild, "autorole-target", !!guildId);
+    if (result.status === "not-ready")
+      return yield* new ConfigurationError({ message: "Discord application is not ready." });
+    if (result.status === "missing")
+      return yield* new ConfigurationError({
+        message: "Run bun run register to register /autorole-target.",
+      });
+    return yield* IntegrationSettings.selectRole(guild.id, result.permissions);
   });
 
   private static selectRole(

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { Events, type Client } from "discord.js";
 import { Deferred, Effect } from "effect";
 import { listen, makeClient } from "../packages/discord/client";
@@ -74,4 +74,57 @@ test("scope closure interrupts running event handlers", async () => {
     ),
   );
   expect(interrupted).toBe(true);
+});
+
+test("command upserts use the selected scope and preserve unrelated commands", async () => {
+  const { REST, Routes } = await import("discord.js");
+  const { upsertCommands } = await import("../packages/discord/commands");
+  const rest = new REST({ version: "10" });
+  const routes: string[] = [];
+  const post = spyOn(rest, "post").mockImplementation(async (route) => {
+    routes.push(route);
+    return {};
+  });
+  const definitions = [{ toJSON: () => ({ name: "one" }) }, { toJSON: () => ({ name: "two" }) }];
+  try {
+    await Effect.runPromise(upsertCommands(rest, "app", "guild", definitions));
+    await Effect.runPromise(upsertCommands(rest, "app", undefined, definitions));
+    expect(routes).toEqual([
+      Routes.applicationGuildCommands("app", "guild"),
+      Routes.applicationGuildCommands("app", "guild"),
+      Routes.applicationCommands("app"),
+      Routes.applicationCommands("app"),
+    ]);
+  } finally {
+    post.mockRestore();
+  }
+});
+
+test("presence rotates immediately and stops when interrupted", async () => {
+  const { rotatePresence } = await import("../packages/discord/presence");
+  const { TestClock } = await import("effect/testing");
+  const { Fiber } = await import("effect");
+  const states: string[] = [];
+  const client = {
+    user: {
+      setPresence: (presence: { activities: { state: string }[] }) => {
+        const state = presence.activities[0]?.state;
+        if (state) states.push(state);
+      },
+    },
+  } as unknown as Client<true>;
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(
+        rotatePresence(client, "Game", ["first", "second"], 60_000),
+        { startImmediately: true },
+      );
+      expect(states).toEqual(["first"]);
+      yield* TestClock.adjust(60_000);
+      expect(states).toEqual(["first", "second"]);
+      yield* Fiber.interrupt(fiber);
+      yield* TestClock.adjust(60_000);
+      expect(states).toEqual(["first", "second"]);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
 });
