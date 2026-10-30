@@ -43,19 +43,3 @@ bun run avatar ./athena.png           # Update the bot avatar from a PNG; requir
 ```
 
 Command cleanup preserves `/autorole`, `/autorole-target`, and context-menu commands.
-
-## Deploy
-
-Forgejo Actions deploys on pushes to `main`, or manually from the repository's Actions page. The dedicated `deploy` runner installs locked dependencies, runs checks, compiles the executable, and uses the restricted receiver below. Deployments run one at a time and wait for Discord readiness.
-
-`bun run deploy` dispatches that same workflow using an authenticated `fj` CLI. It does not copy local credentials or open an administrative SSH session. Change runtime credentials deliberately on Osiris as an administrator. The CI-only `bun run deploy:artifact` sends an existing `dist/autorole` through the same restricted path, using deployment credentials provided in the job environment.
-
-## Restricted production deployment
-
-The production workflow uses the same isolated SSH client as Guildmaster and the NAS: `deploy/tailscale-ssh.sh`, vendored unchanged from `satet-infra`. Its Tailscale binaries are pinned and checksum-verified. A job-local userspace daemon authenticates as `tag:deploy`; no runner host socket, privileged container, or forwarded agent is needed.
-
-The job connects to `athena@100.65.83.93:2222` using a pinned host key and the repository's `ATHENA_DEPLOY_SSH_KEY`. `TS_OAUTH_CLIENT_SECRET` must be scoped to Auth Keys Write for `tag:deploy`. Runtime credentials remain in `/var/lib/athena/runtime.env`; Athena has no sudo and its service cannot write its executable or configuration.
-
-An administrator installs `deploy/receive.py`, `deploy/athena.service`, and the public key using `sudo bash deploy/setup-osiris.sh prepare PUBLIC_KEY_FILE`. This prepares the deployment infrastructure; a new host also needs an initial executable, runtime environment, and readiness marker before the receiver can deploy. The receiver accepts only `verify` or `deploy`, with a commit SHA, executable checksum and byte count, followed by a bounded Linux x86-64 executable. CI cannot upload service definitions, choose server paths, or run a shell.
-
-Systemd's Type=notify checks Discord readiness. Failed updates restore the previous executable. Keep application data migrations compatible with rollback.
