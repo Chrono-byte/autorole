@@ -1,14 +1,7 @@
-import {
-  ActivityType,
-  Client,
-  Events,
-  GatewayIntentBits,
-  type GuildMember,
-  type Interaction,
-  type PartialGuildMember,
-} from "discord.js";
+import { ActivityType, Events, GatewayIntentBits } from "discord.js";
 import { Deferred, Effect, Schedule } from "effect";
-import { asError, trySync } from "../effectful";
+import { listen, makeClient } from "../../packages/discord/client";
+import { asError } from "../effectful";
 import { DiscordRequestError, discordRequest } from "../errors";
 import { type Configuration } from "../config/Configuration";
 import { IntegrationSettings } from "../config/IntegrationSettings";
@@ -19,6 +12,8 @@ import { notifyReady } from "./notifyReady";
 import { RoleService } from "./RoleService";
 
 const MINUTE_MS = 60_000;
+const reportHandler = (error: Error) =>
+  logError("autorole_handler_failed", { message: error.message });
 
 const overwatchStatuses = [
   "Escorting the payload",
@@ -44,15 +39,9 @@ export class AutoroleBot {
     const configuration = this.configuration;
     return Effect.gen(function* () {
       const scope = yield* Effect.scope;
-      const runSync = Effect.runSyncWith(yield* Effect.context());
       const shutdown = yield* Deferred.make<void>();
-      const client = yield* Effect.acquireRelease(
-        trySync(
-          () =>
-            new Client({
-              intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
-            }),
-        ),
+      const client = yield* makeClient(
+        { intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] },
         (discordClient) => discordRequest(() => discordClient.destroy()).pipe(Effect.ignore),
       );
       const roles = new RoleService(new IntegrationSettings(configuration.guildId));
@@ -73,14 +62,10 @@ export class AutoroleBot {
         configuration.guildId,
       );
       const commands = new AutoroleCommands(roles);
-      const fork = (effect: Effect.Effect<void, Error>) => {
-        const handled = effect.pipe(
-          Effect.catch((error) => logError("autorole_handler_failed", { message: error.message })),
-        );
-        runSync(Effect.forkIn(scope, { startImmediately: true })(handled));
-      };
-      const onReady = (readyClient: Client<true>) => {
-        fork(
+      yield* listen(
+        client,
+        Events.ClientReady,
+        (readyClient) =>
           Effect.gen(function* () {
             yield* Effect.forkIn(scope, { startImmediately: true })(assignments.start());
             let statusIndex = 0;
@@ -113,38 +98,40 @@ export class AutoroleBot {
               ),
             );
           }),
-        );
-      };
-      const onMemberAdd = (member: GuildMember) => fork(assignments.observeJoin(member));
-      const onMemberUpdate = (before: GuildMember | PartialGuildMember, member: GuildMember) => {
-        if (before.pending && !member.pending) fork(assignments.observe(member));
-      };
-      const onMemberAvailable = (member: GuildMember | PartialGuildMember) =>
-        fork(assignments.observe(member));
-      const onInteraction = (interaction: Interaction) => {
-        if (interaction.isChatInputCommand()) fork(commands.execute(interaction));
-      };
-      const onClientError = (error: Error) =>
-        fork(logError("autorole_error", { message: error.message }));
-
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          client.once(Events.ClientReady, onReady);
-          client.on(Events.GuildMemberAdd, onMemberAdd);
-          client.on(Events.GuildMemberUpdate, onMemberUpdate);
-          client.on(Events.GuildMemberAvailable, onMemberAvailable);
-          client.on(Events.InteractionCreate, onInteraction);
-          client.on(Events.Error, onClientError);
-          return () => {
-            client.off(Events.ClientReady, onReady);
-            client.off(Events.GuildMemberAdd, onMemberAdd);
-            client.off(Events.GuildMemberUpdate, onMemberUpdate);
-            client.off(Events.GuildMemberAvailable, onMemberAvailable);
-            client.off(Events.InteractionCreate, onInteraction);
-            client.off(Events.Error, onClientError);
-          };
-        }),
-        (removeListeners) => Effect.sync(removeListeners),
+        reportHandler,
+        true,
+      );
+      yield* listen(
+        client,
+        Events.GuildMemberAdd,
+        (member) => assignments.observeJoin(member),
+        reportHandler,
+      );
+      yield* listen(
+        client,
+        Events.GuildMemberUpdate,
+        (before, member) =>
+          before.pending && !member.pending ? assignments.observe(member) : Effect.void,
+        reportHandler,
+      );
+      yield* listen(
+        client,
+        Events.GuildMemberAvailable,
+        (member) => assignments.observe(member),
+        reportHandler,
+      );
+      yield* listen(
+        client,
+        Events.InteractionCreate,
+        (interaction) =>
+          interaction.isChatInputCommand() ? commands.execute(interaction) : Effect.void,
+        reportHandler,
+      );
+      yield* listen(
+        client,
+        Events.Error,
+        (error) => logError("autorole_error", { message: error.message }),
+        reportHandler,
       );
       yield* discordRequest(() => client.login(configuration.token));
       yield* Deferred.await(shutdown);

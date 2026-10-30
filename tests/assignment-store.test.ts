@@ -103,3 +103,41 @@ test("storage open failure is tagged without losing the underlying cause", async
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("migration preserves existing screening evidence and retry state", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "autorole-migrate-"));
+  const path = join(directory, "assignments.sqlite");
+  const db = new Database(path, { create: true });
+  db.run(
+    "CREATE TABLE assignments (guildId TEXT NOT NULL, memberId TEXT NOT NULL, joinedAt INTEGER NOT NULL, attempts INTEGER NOT NULL, nextAttempt INTEGER NOT NULL, screeningComplete INTEGER NOT NULL, PRIMARY KEY (guildId, memberId))",
+  );
+  db.run("INSERT INTO assignments VALUES ('guild', 'member', 123, 4, 5000, 1)");
+  db.close();
+  try {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const store = yield* AssignmentStore.make(path);
+          expect(yield* store.get("guild", "member")).toEqual({
+            ...observed,
+            screeningComplete: 1,
+            attempts: 4,
+            nextAttempt: 5000,
+          });
+          expect(yield* store.due(4999)).toEqual([]);
+          expect(yield* store.due(5000)).toHaveLength(1);
+        }),
+      ),
+    );
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const store = yield* AssignmentStore.make(path);
+          expect((yield* store.get("guild", "member"))?.attempts).toBe(4);
+        }),
+      ),
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
