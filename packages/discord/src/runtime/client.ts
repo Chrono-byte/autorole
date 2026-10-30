@@ -1,6 +1,6 @@
 import { Client, type ClientEvents, type ClientOptions } from "discord.js";
 import { Effect } from "effect";
-import { discordRequest } from "./request";
+import { discordRequest } from "../api/request";
 
 /** Acquire a Discord client for the current scope. */
 export function makeClient(options: ClientOptions, close: (client: Client) => Effect.Effect<void>) {

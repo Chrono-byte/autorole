@@ -1,24 +1,27 @@
-export { listen, makeClient, runClient } from "./client";
-export { commandPermissions, upsertCommands } from "./commands";
+export { listen, makeClient, runClient } from "./src/runtime/client";
+export { commandPermissions, upsertCommands } from "./src/api/commands";
 export {
   CommandCatalog,
   CommandRegistry,
-  composeModules,
-  event,
-  install,
-  runBot,
-  type BotModule,
-  type BotModuleFactory,
   type Command,
   type CommandDefinition,
   type CommandSpec,
-  type EventHandler,
-} from "./framework";
-export { rotatePresence } from "./presence";
-export { options } from "./options";
-export { checkPermissions, PermissionDenied, type CommandPermissions } from "./permissions";
-export { DiscordRequestError, discordRequest } from "./request";
-export { roleAssignability } from "./roles";
-export { subcommands, UnknownSubcommandError, type SubcommandRoute } from "./subcommands";
+} from "./src/commands/registry";
+export { event, install, type EventHandler } from "./src/runtime/events";
+export { composeModules, runBot, type BotModule, type BotModuleFactory } from "./src/runtime/bot";
+export { rotatePresence } from "./src/runtime/presence";
+export { options } from "./src/commands/options";
+export {
+  checkPermissions,
+  PermissionDenied,
+  type CommandPermissions,
+} from "./src/commands/permissions";
+export { DiscordRequestError, discordRequest } from "./src/api/request";
+export { roleAssignability } from "./src/api/roles";
+export {
+  subcommands,
+  UnknownSubcommandError,
+  type SubcommandRoute,
+} from "./src/commands/subcommands";
 
-export { deferEphemeral, editResponse, replyEphemeral } from "./response";
+export { deferEphemeral, editResponse, replyEphemeral } from "./src/commands/response";

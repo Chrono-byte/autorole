@@ -1,6 +1,6 @@
 import { MessageFlags, type ChatInputCommandInteraction } from "discord.js";
 import { Effect } from "effect";
-import { discordRequest } from "./request";
+import { discordRequest } from "../api/request";
 
 /** Start a private reply that can be completed later. */
 export function deferEphemeral(interaction: ChatInputCommandInteraction) {
