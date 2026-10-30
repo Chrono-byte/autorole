@@ -48,14 +48,10 @@ const catalog = new CommandCatalog<RoleService>([
   },
 ]);
 
-export class AutoroleCommands {
-  static readonly definitions = catalog.definitions;
+export const commandDefinitions = catalog.definitions;
 
-  constructor(private readonly roles: RoleService) {}
-
-  registry() {
-    return catalog.bind(this.roles);
-  }
+export function makeCommandRegistry(roles: RoleService) {
+  return catalog.bind(roles);
 }
 
 const status = Effect.fn("AutoroleCommands.status")(function* (

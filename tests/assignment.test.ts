@@ -16,7 +16,7 @@ import { tryPromise } from "../src/effectful";
 import { OutstandingAssignments } from "../src/bot/OutstandingAssignments";
 import { readConfiguration } from "../src/config/Configuration";
 import { RoleService } from "../src/bot/RoleService";
-import { AutoroleCommands } from "../src/bot/AutoroleCommands";
+import { commandDefinitions, makeCommandRegistry } from "../src/bot/AutoroleCommands";
 import { makeAutorole } from "../src/bot/module";
 import { install } from "../packages/discord/framework";
 
@@ -76,7 +76,7 @@ class DiscordFixture {
     ) {
       return [
         {
-          ...AutoroleCommands.definitions
+          ...commandDefinitions
             .find((definition) => definition.name === "autorole-target")
             ?.toJSON(),
           id: ids.command,
@@ -277,14 +277,12 @@ test("missing Manage Roles and insufficient hierarchy prevent role assignment", 
 });
 
 test("command definitions serialize without constructing runtime dependencies", () => {
-  expect(AutoroleCommands.definitions.map((definition) => definition.toJSON().name)).toEqual([
+  expect(commandDefinitions.map((definition) => definition.toJSON().name)).toEqual([
     "autorole",
     "autorole-target",
   ]);
   expect(
-    AutoroleCommands.definitions
-      .find((definition) => definition.name === "autorole-target")
-      ?.toJSON(),
+    commandDefinitions.find((definition) => definition.name === "autorole-target")?.toJSON(),
   ).toMatchObject({
     name: "autorole-target",
     default_member_permissions: "0",
@@ -717,7 +715,7 @@ test("autorole module handles a join and removes its listeners on scope exit", a
 
 test("autorole command catalog dispatches target and permission-denied status", async () => {
   const { MessageFlags } = await import("discord.js");
-  const registry = new AutoroleCommands(new RoleService()).registry();
+  const registry = makeCommandRegistry(new RoleService());
   let targetReply: unknown;
   let statusReply = "";
   let deferred: unknown;

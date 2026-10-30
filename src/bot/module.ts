@@ -1,7 +1,7 @@
 import { Events, type Client } from "discord.js";
 import { Effect } from "effect";
 import { event } from "../../packages/discord/framework";
-import { AutoroleCommands } from "./AutoroleCommands";
+import { makeCommandRegistry } from "./AutoroleCommands";
 import { OutstandingAssignments } from "./OutstandingAssignments";
 import { RoleService } from "./RoleService";
 
@@ -23,7 +23,7 @@ export const makeAutorole = Effect.fn("Autorole.make")(function* (
     options.guildId,
   );
   return {
-    commands: new AutoroleCommands(roles).registry(),
+    commands: makeCommandRegistry(roles),
     events: [
       event(
         Events.ClientReady,

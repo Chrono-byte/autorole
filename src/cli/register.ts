@@ -2,7 +2,7 @@ import { REST } from "discord.js";
 import { Effect } from "effect";
 import { upsertCommands } from "../../packages/discord/commands";
 import { readConfiguration, type Configuration } from "../config/Configuration";
-import { AutoroleCommands } from "../bot/AutoroleCommands";
+import { commandDefinitions } from "../bot/AutoroleCommands";
 import { trySync } from "../effectful";
 import { runMain } from "../runMain";
 
@@ -16,7 +16,7 @@ class CommandRegistrar {
         rest,
         this.config.applicationId,
         this.config.guildId,
-        AutoroleCommands.definitions,
+        commandDefinitions,
       );
       yield* Effect.sync(() =>
         process.stdout.write(

@@ -29,47 +29,40 @@ const overwatchStatuses = [
   "egg",
 ] satisfies [string, ...string[]];
 
-export class AutoroleBot {
-  constructor(private readonly configuration: Configuration) {}
-
-  run() {
-    const configuration = this.configuration;
-    return runBot({
-      token: configuration.token,
-      client: { intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] },
-      modules: [
-        (client) =>
-          makeAutorole(client, {
-            path:
-              process.env.AUTOROLE_STATE_PATH ||
-              (process.env.STATE_DIRECTORY
-                ? `${process.env.STATE_DIRECTORY}/assignments.sqlite`
-                : "./data/assignments.sqlite"),
-            guildId: configuration.guildId,
-            report: (error, guildId, memberId) =>
-              logError("autorole_assignment_error", {
-                guildId,
-                memberId,
-                code: error instanceof DiscordRequestError ? error.code : undefined,
-                message: asError(error).message,
-              }),
-          }),
-      ],
-      presence: { name: "Overwatch", statuses: overwatchStatuses, interval: MINUTE_MS },
-      ready: (client) =>
-        logInfo("autorole_connected", { user: client.user.tag }).pipe(
-          Effect.andThen(notifyReady()),
-        ),
-      readyFailed: (error) =>
-        logError("autorole_ready_notification_failed", { message: error.message }).pipe(
-          Effect.andThen(
-            Effect.sync(() => {
-              process.exitCode = 1;
+export function runAutorole(configuration: Configuration) {
+  return runBot({
+    token: configuration.token,
+    client: { intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] },
+    modules: [
+      (client) =>
+        makeAutorole(client, {
+          path:
+            process.env.AUTOROLE_STATE_PATH ||
+            (process.env.STATE_DIRECTORY
+              ? `${process.env.STATE_DIRECTORY}/assignments.sqlite`
+              : "./data/assignments.sqlite"),
+          guildId: configuration.guildId,
+          report: (error, guildId, memberId) =>
+            logError("autorole_assignment_error", {
+              guildId,
+              memberId,
+              code: error instanceof DiscordRequestError ? error.code : undefined,
+              message: asError(error).message,
             }),
-          ),
+        }),
+    ],
+    presence: { name: "Overwatch", statuses: overwatchStatuses, interval: MINUTE_MS },
+    ready: (client) =>
+      logInfo("autorole_connected", { user: client.user.tag }).pipe(Effect.andThen(notifyReady())),
+    readyFailed: (error) =>
+      logError("autorole_ready_notification_failed", { message: error.message }).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            process.exitCode = 1;
+          }),
         ),
-      reportHandler,
-      reportDiscord: (error) => logError("autorole_error", { message: error.message }),
-    });
-  }
+      ),
+    reportHandler,
+    reportDiscord: (error) => logError("autorole_error", { message: error.message }),
+  });
 }
