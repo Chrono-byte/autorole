@@ -23,5 +23,4 @@ export {
   UnknownSubcommandError,
   type SubcommandRoute,
 } from "./src/commands/subcommands";
-
 export { deferEphemeral, editResponse, replyEphemeral } from "./src/commands/response";
