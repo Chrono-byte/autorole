@@ -1,6 +1,6 @@
 import { GatewayIntentBits } from "discord.js";
 import { Effect } from "effect";
-import { runBot } from "../../packages/discord/framework";
+import { runBot } from "@autorole/discord-framework";
 import { makeAutorole } from "./module";
 import { asError } from "../effectful";
 import { DiscordRequestError } from "../errors";

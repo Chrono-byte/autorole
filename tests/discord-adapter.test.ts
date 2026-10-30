@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { Events, type Client } from "discord.js";
 import { Deferred, Effect } from "effect";
-import { listen, makeClient } from "../packages/discord/client";
+import { listen, makeClient } from "@autorole/discord-framework";
 
 test("listeners run handlers, report failures, and are removed with their scope", async () => {
   const handled: string[] = [];
@@ -78,7 +78,7 @@ test("scope closure interrupts running event handlers", async () => {
 
 test("command upserts use the selected scope and preserve unrelated commands", async () => {
   const { REST, Routes } = await import("discord.js");
-  const { upsertCommands } = await import("../packages/discord/commands");
+  const { upsertCommands } = await import("@autorole/discord-framework");
   const rest = new REST({ version: "10" });
   const routes: string[] = [];
   const post = spyOn(rest, "post").mockImplementation(async (route) => {
@@ -101,7 +101,7 @@ test("command upserts use the selected scope and preserve unrelated commands", a
 });
 
 test("presence rotates immediately and stops when interrupted", async () => {
-  const { rotatePresence } = await import("../packages/discord/presence");
+  const { rotatePresence } = await import("@autorole/discord-framework");
   const { TestClock } = await import("effect/testing");
   const { Fiber } = await import("effect");
   const states: string[] = [];
@@ -130,7 +130,7 @@ test("presence rotates immediately and stops when interrupted", async () => {
 });
 
 test("command registry dispatches, rejects duplicate names, and ignores unknown commands", async () => {
-  const { CommandRegistry } = await import("../packages/discord/framework");
+  const { CommandRegistry } = await import("@autorole/discord-framework");
   const calls: string[] = [];
   const command = {
     definition: { name: "ping", toJSON: () => ({ name: "ping" }) },
@@ -155,7 +155,7 @@ test("command registry dispatches, rejects duplicate names, and ignores unknown 
 
 test("framework routes commands and typed events, reports failures, and removes listeners", async () => {
   const { Client } = await import("discord.js");
-  const { CommandRegistry, event, install } = await import("../packages/discord/framework");
+  const { CommandRegistry, event, install } = await import("@autorole/discord-framework");
   const client = new Client({ intents: [] });
   const handled: string[] = [];
   const errors: string[] = [];
@@ -202,7 +202,7 @@ test("framework routes commands and typed events, reports failures, and removes 
 
 test("client runner installs before login and releases the client on scope exit", async () => {
   const { Client } = await import("discord.js");
-  const { runClient } = await import("../packages/discord/client");
+  const { runClient } = await import("@autorole/discord-framework");
   const calls: string[] = [];
   const login = spyOn(Client.prototype, "login").mockImplementation(async () => {
     calls.push("login");
@@ -235,7 +235,7 @@ test("client runner installs before login and releases the client on scope exit"
 });
 
 test("command catalog shares registration metadata and binds independent dependencies", async () => {
-  const { CommandCatalog } = await import("../packages/discord");
+  const { CommandCatalog } = await import("@autorole/discord-framework");
   const seen: string[] = [];
   const catalog = new CommandCatalog<string>([
     {
@@ -262,7 +262,7 @@ function catalogSpec() {
 
 test("client runner closes the client when setup or login fails", async () => {
   const { Client } = await import("discord.js");
-  const { runClient } = await import("../packages/discord/client");
+  const { runClient } = await import("@autorole/discord-framework");
   let closed = 0;
   const login = spyOn(Client.prototype, "login").mockImplementation(async () => {
     throw new Error("login failed");
@@ -291,7 +291,7 @@ test("client runner closes the client when setup or login fails", async () => {
 
 test("bot runner starts module before readiness and shuts down on readiness failure", async () => {
   const { Client } = await import("discord.js");
-  const { CommandRegistry, event, runBot } = await import("../packages/discord");
+  const { CommandRegistry, event, runBot } = await import("@autorole/discord-framework");
   const calls: string[] = [];
   let runningClient: import("discord.js").Client | undefined;
   const login = spyOn(Client.prototype, "login").mockImplementation(async function (
@@ -361,7 +361,8 @@ test("bot runner starts module before readiness and shuts down on readiness fail
 
 test("modules combine commands and events while rejecting duplicate command names", async () => {
   const { Client } = await import("discord.js");
-  const { CommandRegistry, composeModules, event, install } = await import("../packages/discord");
+  const { CommandRegistry, composeModules, event, install } =
+    await import("@autorole/discord-framework");
   const client = new Client({ intents: [] });
   const calls: string[] = [];
   const first = {
@@ -428,7 +429,7 @@ test("modules combine commands and events while rejecting duplicate command name
 
 test("conflicting modules fail before login and release acquired resources", async () => {
   const { Client } = await import("discord.js");
-  const { CommandRegistry, runBot } = await import("../packages/discord");
+  const { CommandRegistry, runBot } = await import("@autorole/discord-framework");
   const calls: string[] = [];
   const login = spyOn(Client.prototype, "login").mockImplementation(async () => {
     calls.push("login");

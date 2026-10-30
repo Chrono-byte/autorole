@@ -8,7 +8,7 @@ import {
   type Interaction,
 } from "discord.js";
 import { Effect } from "effect";
-import { CommandRegistry, install } from "../packages/discord/framework";
+import { CommandRegistry, install } from "@autorole/discord-framework";
 import { tryPromise } from "../src/effectful";
 
 type CommandState = "fresh" | "deferred" | "replied" | "deferred-replied";

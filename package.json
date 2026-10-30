@@ -1,6 +1,9 @@
 {
   "name": "autorole",
   "private": true,
+  "workspaces": [
+    "packages/discord"
+  ],
   "type": "module",
   "module": "src/index.ts",
   "scripts": {
@@ -20,6 +23,7 @@
     "deploy:artifact": "bash scripts/deploy-artifact.sh"
   },
   "dependencies": {
+    "@autorole/discord-framework": "workspace:*",
     "discord.js": "^14.27.0",
     "effect": "^4.0.7"
   },

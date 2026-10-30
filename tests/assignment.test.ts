@@ -19,7 +19,7 @@ import { readConfiguration } from "../src/config/Configuration";
 import { RoleService } from "../src/bot/RoleService";
 import { commandDefinitions, makeCommandRegistry } from "../src/bot/AutoroleCommands";
 import { makeAutorole } from "../src/bot/module";
-import { install } from "../packages/discord/framework";
+import { install } from "@autorole/discord-framework";
 
 const ids = {
   app: "100000000000000001",

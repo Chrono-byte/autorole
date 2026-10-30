@@ -1,11 +1,13 @@
 # Discord bot framework
 
+This private Bun workspace package exposes its public interface as `@autorole/discord-framework`. It uses the workspace’s `discord.js` and Effect installations as peer dependencies; import from the package root rather than internal files. It exports TypeScript source and is intended for Bun or a TypeScript-aware bundler.
+
 A small Effect-based framework for discord.js slash commands and typed gateway events. Define each command with a Discord builder and an Effect handler, collect them in a `CommandRegistry`, and pass that registry and event definitions to `install` inside an Effect scope. A `CommandCatalog` keeps definitions available before runtime dependencies exist and binds those dependencies when building a registry. Use `registry.definitions` with `upsertCommands` to register the same definitions with Discord; upserts leave unrelated commands and permission overrides intact.
 
 ```ts
 import { Events, SlashCommandBuilder } from "discord.js";
 import { Effect } from "effect";
-import { CommandRegistry, discordRequest, event, install } from "./index";
+import { CommandRegistry, discordRequest, event, install } from "@autorole/discord-framework";
 
 const commands = new CommandRegistry([
   {

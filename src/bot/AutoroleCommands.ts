@@ -6,9 +6,13 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { Effect, Result } from "effect";
-import { CommandCatalog } from "../../packages/discord/framework";
-import { deferEphemeral, editResponse, replyEphemeral } from "../../packages/discord/response";
-import { subcommands } from "../../packages/discord/subcommands";
+import {
+  CommandCatalog,
+  deferEphemeral,
+  editResponse,
+  replyEphemeral,
+  subcommands,
+} from "@autorole/discord-framework";
 import { logError } from "../logger";
 import { RoleService } from "./RoleService";
 

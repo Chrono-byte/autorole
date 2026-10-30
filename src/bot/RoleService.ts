@@ -1,7 +1,6 @@
 import { ApplicationCommandPermissionType, type Guild, type GuildMember } from "discord.js";
 import { Effect } from "effect";
-import { commandPermissions } from "../../packages/discord/commands";
-import { roleAssignability } from "../../packages/discord/roles";
+import { commandPermissions, roleAssignability } from "@autorole/discord-framework";
 import { ConfigurationError, discordRequest } from "../errors";
 export class RoleService {
   constructor(private readonly guildId?: string) {}

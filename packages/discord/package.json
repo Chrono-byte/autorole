@@ -1,0 +1,13 @@
+{
+  "name": "@autorole/discord-framework",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "peerDependencies": {
+    "discord.js": "^14.27.0",
+    "effect": "^4.0.7"
+  }
+}

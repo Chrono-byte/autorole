@@ -6,7 +6,7 @@ import {
   CommandInteractionOptionResolver,
 } from "discord.js";
 import { Effect, Result } from "effect";
-import { options } from "../packages/discord/options";
+import { options } from "@autorole/discord-framework";
 
 function fixture() {
   const client = new Client({ intents: [] });

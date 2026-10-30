@@ -1,6 +1,6 @@
 import { REST } from "discord.js";
 import { Effect } from "effect";
-import { upsertCommands } from "../../packages/discord/commands";
+import { upsertCommands } from "@autorole/discord-framework";
 import { readConfiguration, type Configuration } from "../config/Configuration";
 import { commandDefinitions } from "../bot/AutoroleCommands";
 import { trySync } from "../effectful";

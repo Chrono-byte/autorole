@@ -5,7 +5,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { Effect, Result } from "effect";
-import { checkPermissions, PermissionDenied } from "../packages/discord/permissions";
+import { checkPermissions, PermissionDenied } from "@autorole/discord-framework";
 
 function interaction(
   options: { guildId?: string | null; member?: bigint | null; bot?: bigint | null } = {},

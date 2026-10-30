@@ -1,6 +1,6 @@
 import { Events, type Client } from "discord.js";
 import { Effect } from "effect";
-import { event } from "../../packages/discord/framework";
+import { event } from "@autorole/discord-framework";
 import { makeCommandRegistry } from "./AutoroleCommands";
 import { OutstandingAssignments } from "./OutstandingAssignments";
 import { RoleService } from "./RoleService";

@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-export { DiscordRequestError, discordRequest } from "../packages/discord/request";
+export { DiscordRequestError, discordRequest } from "@autorole/discord-framework";
 
 export class ConfigurationError extends Schema.TaggedError<ConfigurationError>()(
   "ConfigurationError",

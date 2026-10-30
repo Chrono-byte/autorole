@@ -1,4 +1,4 @@
-export { makeClient, runClient } from "./client";
+export { listen, makeClient, runClient } from "./client";
 export { commandPermissions, upsertCommands } from "./commands";
 export {
   CommandCatalog,

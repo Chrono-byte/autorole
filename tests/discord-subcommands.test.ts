@@ -1,8 +1,7 @@
 import { expect, test } from "bun:test";
 import { type ChatInputCommandInteraction } from "discord.js";
 import { Effect, Result } from "effect";
-import { CommandCatalog } from "../packages/discord/framework";
-import { subcommands, UnknownSubcommandError } from "../packages/discord/subcommands";
+import { CommandCatalog, subcommands, UnknownSubcommandError } from "@autorole/discord-framework";
 
 const noop = () => Effect.void;
 
@@ -105,7 +104,7 @@ test("routes through a bound command catalog", async () => {
 
 test("subcommand permissions apply only to the selected route", async () => {
   const { PermissionFlagsBits, PermissionsBitField } = await import("discord.js");
-  const { PermissionDenied } = await import("../packages/discord/permissions");
+  const { PermissionDenied } = await import("@autorole/discord-framework");
   const seen: string[] = [];
   const router = subcommands([
     {
