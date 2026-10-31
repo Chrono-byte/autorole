@@ -17,6 +17,7 @@
     "test": "bun test",
     "check": "bun run typecheck && bun run lint && bun run format:check && bun test",
     "clean-commands": "bun run src/cli/clean-commands.ts",
+    "audit:grants": "bun run scripts/audit-redundant-grants.ts",
     "avatar": "bun run src/cli/set-avatar.ts",
     "lint:fix": "oxlint --fix --deny-warnings .",
     "build:binary": "bun build --compile --minify --keep-names --target=bun-linux-x64-baseline --env=disable --no-compile-autoload-dotenv --no-compile-autoload-bunfig src/index.ts --outfile dist/autorole",
