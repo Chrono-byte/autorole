@@ -1,5 +1,6 @@
 import {
   ApplicationIntegrationType,
+  EmbedBuilder,
   InteractionContextType,
   PermissionFlagsBits,
   SlashCommandBuilder,
@@ -9,6 +10,7 @@ import { Effect, Result } from "effect";
 import {
   CommandCatalog,
   deferEphemeral,
+  discordRequest,
   editResponse,
   replyEphemeral,
   subcommands,
@@ -37,7 +39,29 @@ const targetDefinition = new SlashCommandBuilder()
   .setContexts(InteractionContextType.Guild)
   .setIntegrationTypes(ApplicationIntegrationType.GuildInstall);
 
+const prebanDefinition = new SlashCommandBuilder()
+  .setName("preban")
+  .setDescription("Ban a user by ID, including before they join")
+  .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+  .setContexts(InteractionContextType.Guild)
+  .setIntegrationTypes(ApplicationIntegrationType.GuildInstall)
+  .addStringOption((option) =>
+    option.setName("user-id").setDescription("Discord user ID").setRequired(true),
+  )
+  .addStringOption((option) =>
+    option.setName("reason").setDescription("Reason for the ban").setMaxLength(400),
+  );
+
 const catalog = new CommandCatalog<RoleService>([
+  {
+    definition: prebanDefinition,
+    permissions: {
+      guildOnly: true,
+      member: PermissionFlagsBits.BanMembers,
+      bot: PermissionFlagsBits.BanMembers,
+    },
+    run: (_, interaction) => preban(interaction),
+  },
   {
     definition: statusDefinition,
     run: subcommands<RoleService>([
@@ -93,4 +117,39 @@ const status = Effect.fn("AutoroleCommands.status")(function* (
     }
   }
   yield* editResponse(interaction, content);
+});
+
+const preban = Effect.fn("AutoroleCommands.preban")(function* (
+  interaction: ChatInputCommandInteraction,
+) {
+  const userId = interaction.options.getString("user-id", true).trim();
+  if (!/^\d{17,20}$/.test(userId)) {
+    yield* replyEphemeral(interaction, "Enter a valid Discord user ID.");
+    return;
+  }
+  const guild = interaction.guild;
+  if (!guild) {
+    yield* replyEphemeral(interaction, "This command can only be used in a server.");
+    return;
+  }
+  const reason = interaction.options.getString("reason")?.trim();
+  yield* deferEphemeral(interaction);
+  const user = yield* discordRequest(() => interaction.client.users.fetch(userId));
+  yield* discordRequest(() =>
+    guild.members.ban(userId, {
+      deleteMessageSeconds: 0,
+      reason: `By ${interaction.user.id}${reason ? `: ${reason}` : ""}`,
+    }),
+  );
+  yield* discordRequest(() =>
+    interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("User banned")
+          .setDescription(`${user.tag} (\`${userId}\`)`)
+          .setThumbnail(user.displayAvatarURL())
+          .addFields({ name: "Reason", value: reason || "No reason provided" }),
+      ],
+    }),
+  );
 });

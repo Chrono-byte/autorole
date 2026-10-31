@@ -32,6 +32,10 @@ Use the command's own permissions; app-wide permissions do not select a role. Ru
 
 Pending screening, disabled autorole, and configuration or permission failures are rechecked every five minutes. Transient Discord failures use exponential backoff from one minute to one hour. Outstanding assignments remain in SQLite until completed or the member leaves. Logs retain systemd journal priorities and include Effect fiber and trace identifiers.
 
+## Pre-ban a user
+
+Use `/preban` with a Discord user ID and an optional reason to ban a user before they join. Both you and the bot need Ban Members permission.
+
 ## Maintenance
 
 ```sh
@@ -42,4 +46,4 @@ bun run clean-commands --global       # Remove obsolete global slash commands
 bun run avatar ./athena.png           # Update the bot avatar from a PNG; requires macOS
 ```
 
-Command cleanup preserves `/autorole`, `/autorole-target`, and context-menu commands.
+Command cleanup preserves `/autorole`, `/autorole-target`, `/preban`, and context-menu commands.

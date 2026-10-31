@@ -309,3 +309,50 @@ test("autorole status denies missing permissions through its subcommand route", 
     await client.destroy();
   }
 });
+
+test("preban requires permission and displays the target avatar after banning", async () => {
+  const { makeCommandRegistry } = await import("../src/bot/commands/AutoroleCommands");
+  const { RoleService } = await import("../src/bot/RoleService");
+  const registry = makeCommandRegistry(new RoleService());
+  const calls: unknown[] = [];
+  let response: unknown;
+  const interaction = {
+    commandName: "preban",
+    guildId: "guild",
+    memberPermissions: new PermissionsBitField(PermissionFlagsBits.BanMembers),
+    appPermissions: new PermissionsBitField(PermissionFlagsBits.BanMembers),
+    options: { getString: (name: string) => (name === "user-id" ? "206939288422580225" : "Spam") },
+    user: { id: "moderator" },
+    guild: {
+      members: {
+        ban: async (...args: unknown[]) => {
+          calls.push(args);
+        },
+      },
+    },
+    client: {
+      users: {
+        fetch: async () => ({
+          tag: "target",
+          displayAvatarURL: () => "https://example.com/avatar.png",
+        }),
+      },
+    },
+    deferReply: async () => {},
+    editReply: async (value: unknown) => {
+      response = value;
+    },
+  } as unknown as import("discord.js").ChatInputCommandInteraction;
+  await Effect.runPromise(registry.dispatch(interaction));
+  expect(calls).toEqual([
+    ["206939288422580225", { deleteMessageSeconds: 0, reason: "By moderator: Spam" }],
+  ]);
+  expect(response).toMatchObject({
+    embeds: [
+      { data: { title: "User banned", thumbnail: { url: "https://example.com/avatar.png" } } },
+    ],
+  });
+  interaction.memberPermissions = new PermissionsBitField(0n);
+  await expect(Effect.runPromise(registry.dispatch(interaction))).rejects.toThrow();
+  expect(calls).toHaveLength(1);
+});

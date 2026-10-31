@@ -279,6 +279,7 @@ test("missing Manage Roles and insufficient hierarchy prevent role assignment", 
 
 test("command definitions serialize without constructing runtime dependencies", () => {
   expect(commandDefinitions.map((definition) => definition.toJSON().name)).toEqual([
+    "preban",
     "autorole",
     "autorole-target",
   ]);
