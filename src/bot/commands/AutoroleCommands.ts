@@ -17,6 +17,7 @@ import {
 } from "@autorole/discord-framework";
 import { logError } from "../../logger";
 import { RoleService } from "../RoleService";
+import { syncRoster } from "./syncRoster";
 
 const statusDefinition = new SlashCommandBuilder()
   .setName("autorole")
@@ -52,7 +53,25 @@ const prebanDefinition = new SlashCommandBuilder()
     option.setName("reason").setDescription("Reason for the ban").setMaxLength(400),
   );
 
+const rosterDefinition = new SlashCommandBuilder()
+  .setName("sync-roster")
+  .setDescription("Sync Player with the Crimson, White, and Black team roles")
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild | PermissionFlagsBits.ManageRoles)
+  .setContexts(InteractionContextType.Guild)
+  .setIntegrationTypes(ApplicationIntegrationType.GuildInstall);
+
+const runningRosterSyncs = new Set<string>();
+
 const catalog = new CommandCatalog<RoleService>([
+  {
+    definition: rosterDefinition,
+    permissions: {
+      guildOnly: true,
+      member: PermissionFlagsBits.ManageGuild | PermissionFlagsBits.ManageRoles,
+      bot: PermissionFlagsBits.ManageRoles,
+    },
+    run: (_, interaction) => runRosterSync(interaction),
+  },
   {
     definition: prebanDefinition,
     permissions: {
@@ -151,5 +170,43 @@ const preban = Effect.fn("AutoroleCommands.preban")(function* (
           .addFields({ name: "Reason", value: reason || "No reason provided" }),
       ],
     }),
+  );
+});
+
+const runRosterSync = Effect.fn("AutoroleCommands.syncRoster")(function* (
+  interaction: ChatInputCommandInteraction,
+) {
+  const guild = interaction.guild;
+  if (!guild) {
+    yield* replyEphemeral(interaction, "This command can only be used in a server.");
+    return;
+  }
+  const started = yield* Effect.sync(() => {
+    if (runningRosterSyncs.has(guild.id)) return false;
+    runningRosterSyncs.add(guild.id);
+    return true;
+  });
+  if (!started) {
+    yield* replyEphemeral(interaction, "A roster sync is already running.");
+    return;
+  }
+  yield* Effect.gen(function* () {
+    yield* deferEphemeral(interaction);
+    const result = yield* Effect.result(syncRoster(guild, interaction.user.id));
+    if (Result.isFailure(result)) {
+      yield* editResponse(interaction, result.failure.message);
+      return;
+    }
+    const { added, removed, failed } = result.success;
+    yield* editResponse(
+      interaction,
+      `Roster sync complete: ${added} added, ${removed} removed, ${failed} failed.${failed ? " Check the bot's role hierarchy and try again." : ""}`,
+    );
+  }).pipe(
+    Effect.ensuring(
+      Effect.sync(() => {
+        runningRosterSyncs.delete(guild.id);
+      }),
+    ),
   );
 });
