@@ -1,4 +1,4 @@
-import { Events, GatewayIntentBits } from "discord.js";
+import { Events, GatewayIntentBits, Partials } from "discord.js";
 import { Deferred, Effect } from "effect";
 import {
   discordRequest,
@@ -39,7 +39,16 @@ export const runAutorole = Effect.fn("Autorole.run")(function* (configuration: C
   const scope = yield* Effect.scope;
   const shutdown = yield* Deferred.make<void>();
   const client = yield* makeClient(
-    { intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] },
+    {
+      intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.MessageContent,
+      ],
+      partials: [Partials.Channel],
+    },
     (discordClient) => discordRequest(() => discordClient.destroy()).pipe(Effect.ignore),
   );
   const autorole = yield* makeAutorole(client, {

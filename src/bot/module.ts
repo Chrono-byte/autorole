@@ -1,9 +1,10 @@
 import { Events, type Client } from "discord.js";
 import { Effect } from "effect";
-import { event } from "@autorole/discord-framework";
+import { buttonEvent, event } from "@autorole/discord-framework";
 import { makeCommandRegistry } from "./commands/AutoroleCommands";
 import { OutstandingAssignments } from "./assignments/OutstandingAssignments";
 import { RoleService } from "./RoleService";
+import { Suggestions } from "./suggestions/Suggestions";
 
 export const makeAutorole = Effect.fn("Autorole.make")(function* (
   client: Client,
@@ -21,10 +22,19 @@ export const makeAutorole = Effect.fn("Autorole.make")(function* (
     options.report,
     options.guildId,
   );
+  const suggestions = yield* Suggestions.make(
+    client,
+    options.path === ":memory:" ? ":memory:" : `${options.path}.suggestions`,
+  );
   return {
     commands: makeCommandRegistry(roles),
     start: assignments.start(),
     events: [
+      buttonEvent(
+        (interaction) => interaction.customId.startsWith("suggestions:"),
+        (interaction) => suggestions.interaction(interaction),
+      ),
+      event(Events.MessageCreate, (message) => suggestions.message(message)),
       event(Events.GuildMemberAdd, (member) => assignments.observeJoin(member)),
       event(Events.GuildMemberUpdate, (before, member) =>
         before.pending && !member.pending ? assignments.observe(member) : Effect.void,

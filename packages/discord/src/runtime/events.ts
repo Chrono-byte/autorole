@@ -1,4 +1,10 @@
-import { Events, type Client, type ClientEvents } from "discord.js";
+import {
+  Events,
+  type ButtonInteraction,
+  type ChatInputCommandInteraction,
+  type Client,
+  type ClientEvents,
+} from "discord.js";
 import { Cause, Effect } from "effect";
 import { CommandRegistry } from "../commands/registry";
 import { PermissionDenied } from "../commands/permissions";
@@ -20,6 +26,52 @@ export function event<K extends keyof ClientEvents>(
   return (client, report) => listen(client, name, run, report, options?.once);
 }
 
+function runInteraction(
+  interaction: ChatInputCommandInteraction | ButtonInteraction,
+  run: () => Effect.Effect<void, Error>,
+  report: Report,
+  defaultError?: string,
+) {
+  return Effect.try({
+    try: run,
+    catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+  }).pipe(
+    Effect.flatMap((handler) => handler),
+    Effect.catchCause((cause) => {
+      if (Cause.hasInterrupts(cause)) return Effect.failCause(cause);
+      const failure = Cause.squash(cause);
+      const error = failure instanceof Error ? failure : new Error(String(failure));
+      const message = error instanceof PermissionDenied ? error.message : defaultError;
+      const log = error instanceof PermissionDenied ? Effect.void : report(error);
+      return log.pipe(
+        Effect.andThen(notifyCommandFailure(interaction, message).pipe(Effect.catch(report))),
+      );
+    }),
+  );
+}
+
+/** Install button interactions with the same scoped lifecycle and error handling as commands. */
+export function buttonEvent(
+  matches: (interaction: ButtonInteraction) => boolean,
+  run: (interaction: ButtonInteraction) => Effect.Effect<void, Error>,
+): EventHandler {
+  return (client, report) =>
+    listen(
+      client,
+      Events.InteractionCreate,
+      (interaction) => {
+        if (!interaction.isButton()) return Effect.void;
+        return runInteraction(
+          interaction,
+          () => (matches(interaction) ? run(interaction) : Effect.void),
+          report,
+          "Something went wrong. Please try again.",
+        );
+      },
+      report,
+    );
+}
+
 export const install = Effect.fn("Discord.install")(function* (
   client: Client,
   commands: CommandRegistry,
@@ -31,22 +83,7 @@ export const install = Effect.fn("Discord.install")(function* (
     Events.InteractionCreate,
     (interaction) => {
       if (!interaction.isChatInputCommand()) return Effect.void;
-      return Effect.try({
-        try: () => commands.dispatch(interaction),
-        catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
-      }).pipe(
-        Effect.flatMap((handler) => handler),
-        Effect.catchCause((cause) => {
-          if (Cause.hasInterrupts(cause)) return Effect.failCause(cause);
-          const failure = Cause.squash(cause);
-          const error = failure instanceof Error ? failure : new Error(String(failure));
-          const message = error instanceof PermissionDenied ? error.message : undefined;
-          const log = error instanceof PermissionDenied ? Effect.void : report(error);
-          return log.pipe(
-            Effect.andThen(notifyCommandFailure(interaction, message).pipe(Effect.catch(report))),
-          );
-        }),
-      );
+      return runInteraction(interaction, () => commands.dispatch(interaction), report);
     },
     report,
   );

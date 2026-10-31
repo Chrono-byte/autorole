@@ -40,6 +40,14 @@ In Overwatch Esports at IUI, `/sync-roster` adds Player to members with IUI Crim
 
 Use `/preban` with a Discord user ID and an optional reason to ban a user before they join. Both you and the bot need Ban Members permission.
 
+## Suggestions
+
+In the IUI server, the button in `#suggestions` opens a private DM with Sigil and an officer thread. Officers and the esports advisor can read and reply to suggestions, as can server administrators. Each person can have one open conversation; the member or a moderator can close it with the button. Text and attachments are forwarded, and a ✅ reaction means the message was delivered.
+
+Active conversation mappings are stored alongside the assignment database in a separate SQLite file. Messages sent while the bot is offline are not automatically replayed; resend messages that never receive a ✅ after it returns. Enable Discord's **Message Content Intent** and the bot's server-member intent. The officer inbox must remain private and inside the Officers category.
+
+After deploying the bot, run `bun run setup:suggestions` with Sigil's token and application ID configured. This installs or updates the button and prevents members from posting publicly in `#suggestions`.
+
 ## Maintenance
 
 ```sh

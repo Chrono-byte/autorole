@@ -7,7 +7,7 @@ export {
   type CommandDefinition,
   type CommandSpec,
 } from "./src/commands/registry";
-export { event, install, type EventHandler } from "./src/runtime/events";
+export { buttonEvent, event, install, type EventHandler } from "./src/runtime/events";
 export { composeModules, runBot, type BotModule, type BotModuleFactory } from "./src/runtime/bot";
 export { rotatePresence } from "./src/runtime/presence";
 export { options } from "./src/commands/options";
@@ -25,3 +25,5 @@ export {
 } from "./src/commands/subcommands";
 export { deferEphemeral, editResponse, replyEphemeral } from "./src/commands/response";
 export { fetchGuildMember } from "./src/api/members";
+
+export { forwardMessage } from "./src/api/messages";
