@@ -36,8 +36,7 @@ const closeButton = (threadId: string) =>
   );
 
 export const suggestionPanel = {
-  content:
-    "Have a suggestion? Send it privately to the officers and esports advisor. Server administrators can also see it.",
+  content: "Have a suggestion? Send it privately to the officers.",
   components: [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
@@ -217,9 +216,7 @@ export class Suggestions {
       );
       return;
     }
-    yield* discordRequest(() =>
-      dm.send("Opening a private conversation with the officers and esports advisor…"),
-    );
+    yield* discordRequest(() => dm.send("Opening a private conversation with the officers…"));
     const thread = yield* discordRequest(() =>
       inbox.threads.create({
         name: `suggestion-${interaction.user.id}`,
@@ -247,7 +244,7 @@ export class Suggestions {
     yield* discordRequest(() =>
       dm.send({
         content:
-          "Your conversation is open. Send your suggestion here; officers and the esports advisor can reply in this DM. Server administrators can also see it. A ✅ reaction means your message was delivered. Use the button below when you're finished.",
+          "Your conversation is open. Send your suggestion here; officers can reply in this DM. A ✅ reaction means your message was delivered. Use the button below when you're finished.",
         components: [closeButton(thread.id)],
       }),
     );
