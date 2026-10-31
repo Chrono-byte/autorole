@@ -4,6 +4,7 @@
 
 - Read the rules below and complete Discord's membership screening if prompted.
 - Say hello in <#1415400508578856999> and share your BattleTag in <#1415400508960673894> if you'd like to find people to play with.
+- Looking for people to play with? Visit <#1566115335906656357>.
 - Check <#1415405101887262720> and <#1557079420769149109> for updates.
 - Interested in PUGs? Check <#1566113222938071230> for announcements.
 
