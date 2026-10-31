@@ -133,7 +133,7 @@ const preban = Effect.fn("AutoroleCommands.preban")(function* (
     return;
   }
   const reason = interaction.options.getString("reason")?.trim();
-  yield* deferEphemeral(interaction);
+  yield* discordRequest(() => interaction.deferReply());
   const user = yield* discordRequest(() => interaction.client.users.fetch(userId));
   yield* discordRequest(() =>
     guild.members.ban(userId, {
