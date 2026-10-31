@@ -32,6 +32,7 @@ function fixture() {
   const edits: string[] = [];
   const reactions: string[] = [];
   const errors: string[] = [];
+  const threadNames: string[] = [];
   let creations = 0;
   let archived = false;
   let dmBlocked = false;
@@ -78,8 +79,9 @@ function fixture() {
     permissionOverwrites: { cache: permissions },
     permissionsFor: () => new PermissionsBitField(F.ViewChannel | F.SendMessagesInThreads),
     threads: {
-      create: async () => {
+      create: async ({ name }: { name: string }) => {
         creations++;
+        threadNames.push(name);
         threadAvailable = true;
         return thread;
       },
@@ -93,6 +95,8 @@ function fixture() {
   };
   const user = {
     id: userId,
+    username: "example_user",
+    globalName: "Example",
     bot: false,
     createDM: async () => dm,
     send: async (value: unknown) => dm.send(value),
@@ -118,6 +122,7 @@ function fixture() {
           ? suggestionPanelChannelId
           : threadId,
       user,
+      member: { nickname: "Member Name" },
       memberPermissions: new PermissionsBitField(moderator ? F.ManageMessages : 0n),
       deferReply: async () => {},
       editReply: async (text: string) => {
@@ -158,6 +163,7 @@ function fixture() {
     edits,
     reactions,
     errors,
+    threadNames,
     creations: () => creations,
     archived: () => archived,
     deleted: () => deleted,
@@ -212,6 +218,7 @@ test("button opens one private conversation, relays both ways, and closes it", a
         const service = yield* Suggestions.make(f.client, ":memory:");
         yield* service.interaction(f.interaction("suggestions:open"));
         expect(f.creations()).toBe(1);
+        expect(f.threadNames).toEqual(["Suggestion · Member Name (@example_user)"]);
         expect(f.dms).toHaveLength(2);
         expect(f.sentToThread).toHaveLength(1);
         yield* service.interaction(f.interaction("suggestions:open"));

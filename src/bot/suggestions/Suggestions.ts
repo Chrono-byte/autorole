@@ -217,9 +217,17 @@ export class Suggestions {
       return;
     }
     yield* discordRequest(() => dm.send("Opening a private conversation with the officers…"));
+    const member = interaction.member;
+    const nickname = member && ("nickname" in member ? member.nickname : member.nick);
+    const username = interaction.user.username;
+    const displayName = (nickname ?? interaction.user.globalName ?? username)
+      .replace(/\s+/g, " ")
+      .trim();
+    const name = [...(displayName || username)].slice(0, 25).join("");
+    const suffix = name.toLowerCase() === username.toLowerCase() ? "" : ` (@${username})`;
     const thread = yield* discordRequest(() =>
       inbox.threads.create({
-        name: `suggestion-${interaction.user.id}`,
+        name: `Suggestion · ${name}${suffix}`,
         autoArchiveDuration: ThreadAutoArchiveDuration.OneDay,
         type: ChannelType.PublicThread,
         reason: "Open a suggestion for the officer team",
