@@ -6,6 +6,7 @@ import { OutstandingAssignments } from "./assignments/OutstandingAssignments";
 import { RoleService } from "./RoleService";
 import { Suggestions } from "./suggestions/Suggestions";
 import { StatsStore } from "./StatsStore";
+import { automaticRosterMember, rosterChanged } from "./AutomaticRoster";
 import { serverStatsCommands } from "./commands/ServerStatsCommand";
 
 export const makeAutorole = Effect.fn("Autorole.make")(function* (
@@ -44,7 +45,10 @@ export const makeAutorole = Effect.fn("Autorole.make")(function* (
       event(Events.MessageUpdate, (_before, message) => suggestions.edited(message)),
       event(Events.GuildMemberAdd, (member) => assignments.observeJoin(member)),
       event(Events.GuildMemberUpdate, (before, member) =>
-        before.pending && !member.pending ? assignments.observe(member) : Effect.void,
+        Effect.gen(function* () {
+          if (before.pending && !member.pending) yield* assignments.observe(member);
+          if (rosterChanged(before, member)) yield* automaticRosterMember(member);
+        }),
       ),
       event(Events.GuildMemberAvailable, (member) => assignments.observe(member)),
     ],

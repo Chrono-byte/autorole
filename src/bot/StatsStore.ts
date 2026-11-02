@@ -35,10 +35,6 @@ export class StatsStore {
       db.run(
         "CREATE TABLE IF NOT EXISTS server_stats (guildId TEXT PRIMARY KEY NOT NULL, channelId TEXT NOT NULL)",
       );
-      db.run("INSERT OR IGNORE INTO server_stats (guildId, channelId) VALUES (?, ?)", [
-        "1415400507006124093",
-        "1566691860234371203",
-      ]);
     });
     return new StatsStore(db);
   });

@@ -11,7 +11,7 @@ export const teamRoleIds = [
   "1415400507006124096",
 ] as const;
 
-export const syncRoster = Effect.fn("Roster.sync")(function* (guild: Guild, actorId: string) {
+const validateRoster = Effect.fn("Roster.validate")(function* (guild: Guild) {
   if (guild.id !== rosterGuildId)
     return yield* new ConfigurationError({
       message: "This command is only available in Overwatch Esports at IUI.",
@@ -31,7 +31,32 @@ export const syncRoster = Effect.fn("Roster.sync")(function* (guild: Guild, acto
           ? "Move the bot's highest role above Player."
           : "The bot cannot manage the Player role.",
     });
-  if (actorId !== guild.ownerId) {
+  return playerRole;
+});
+
+export const syncRosterMember = Effect.fn("Roster.syncMember")(function* (
+  guild: Guild,
+  memberId: string,
+  reason = "Automatic roster sync",
+) {
+  yield* validateRoster(guild);
+  const member = yield* discordRequest(() =>
+    guild.members.fetch({ user: memberId, force: true, cache: false }),
+  );
+  const hasPlayer = member.roles.cache.has(playerRoleId);
+  const hasTeam = teamRoleIds.some((id) => member.roles.cache.has(id));
+  if (hasPlayer === hasTeam) return "unchanged" as const;
+  if (hasTeam) {
+    yield* discordRequest(() => member.roles.add(playerRoleId, reason));
+    return "added" as const;
+  }
+  yield* discordRequest(() => member.roles.remove(playerRoleId, reason));
+  return "removed" as const;
+});
+
+export const syncRoster = Effect.fn("Roster.sync")(function* (guild: Guild, actorId?: string) {
+  const playerRole = yield* validateRoster(guild);
+  if (actorId && actorId !== guild.ownerId) {
     const actor = yield* discordRequest(() => guild.members.fetch({ user: actorId, force: true }));
     if (actor.roles.highest.comparePositionTo(playerRole) <= 0)
       return yield* new ConfigurationError({ message: "Your highest role must be above Player." });
@@ -70,10 +95,20 @@ export const syncRoster = Effect.fn("Roster.sync")(function* (guild: Guild, acto
         const hasTeam = teamRoleIds.some((id) => member.roles.cache.has(id));
         if (hasPlayer === hasTeam) return "unchanged" as const;
         if (hasTeam) {
-          yield* discordRequest(() => member.roles.add(playerRoleId, `Roster sync by ${actorId}`));
+          yield* discordRequest(() =>
+            member.roles.add(
+              playerRoleId,
+              actorId ? `Roster sync by ${actorId}` : "Automatic roster sync",
+            ),
+          );
           return "added" as const;
         }
-        yield* discordRequest(() => member.roles.remove(playerRoleId, `Roster sync by ${actorId}`));
+        yield* discordRequest(() =>
+          member.roles.remove(
+            playerRoleId,
+            actorId ? `Roster sync by ${actorId}` : "Automatic roster sync",
+          ),
+        );
         return "removed" as const;
       }),
     );

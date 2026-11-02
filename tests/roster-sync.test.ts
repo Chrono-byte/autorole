@@ -157,3 +157,45 @@ test("the roster command enforces member and bot permissions before reading memb
   await expect(Effect.runPromise(registry.dispatch(interaction))).rejects.toThrow();
   expect(read).toBe(false);
 });
+
+test("automatic member sync uses current roles and repairs Player", async () => {
+  const { syncRosterMember } = await import("../src/bot/commands/syncRoster");
+  const f = fixture();
+  f.roster.set("team", f.member("team", [teamRoleIds[0]]));
+  f.roster.set("former", f.member("former", [playerRoleId]));
+  f.roster.set("current", f.member("current", [playerRoleId, teamRoleIds[1]]));
+  expect(await Effect.runPromise(syncRosterMember(f.guild, "team"))).toBe("added");
+  expect(await Effect.runPromise(syncRosterMember(f.guild, "former"))).toBe("removed");
+  expect(await Effect.runPromise(syncRosterMember(f.guild, "current"))).toBe("unchanged");
+  expect(f.writes).toEqual(["add:team", "remove:former"]);
+  f.roleList.delete(teamRoleIds[2]);
+  await expect(Effect.runPromise(syncRosterMember(f.guild, "former"))).rejects.toThrow(
+    "role is missing",
+  );
+  expect(f.writes).toEqual(["add:team", "remove:former"]);
+});
+
+test("only roster role changes in the target guild trigger automatic member sync", async () => {
+  const { rosterChanged } = await import("../src/bot/AutomaticRoster");
+  const f = fixture();
+  const before = {
+    ...f.member("one", []),
+    guild: f.guild,
+  } as unknown as import("discord.js").GuildMember;
+  const team = {
+    ...f.member("one", [teamRoleIds[0]]),
+    guild: f.guild,
+  } as unknown as import("discord.js").GuildMember;
+  const unrelated = {
+    ...f.member("one", ["other"]),
+    guild: f.guild,
+  } as unknown as import("discord.js").GuildMember;
+  expect(rosterChanged(before, team)).toBe(true);
+  expect(rosterChanged(before, unrelated)).toBe(false);
+  expect(
+    rosterChanged(before, {
+      ...team,
+      guild: { id: "other" },
+    } as unknown as import("discord.js").GuildMember),
+  ).toBe(false);
+});

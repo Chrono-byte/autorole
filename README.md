@@ -34,7 +34,7 @@ Pending screening, disabled autorole, and configuration or permission failures a
 
 ## Sync the roster
 
-In Overwatch Esports at IUI, `/sync-roster` adds Player to members with IUI Crimson, IUI White, or IUI Black and removes Player from members without any of those team roles. It runs on demand and reports failures. The caller needs Manage Server and Manage Roles, and both the caller and the bot must have a role above Player.
+In Overwatch Esports at IUI, `/sync-roster` adds Player to members with IUI Crimson, IUI White, or IUI Black and removes Player from members without any of those team roles. The bot updates Player when those roles change and reconciles the roster on startup and every five minutes. `/sync-roster` remains available for an immediate manual sync and reports failures. The command caller needs Manage Server and Manage Roles, and both the caller and the bot must have a role above Player.
 
 ## Pre-ban a user
 
@@ -66,4 +66,4 @@ Command cleanup preserves `/autorole`, `/autorole-target`, `/preban`, `/sync-ros
 
 ## Server member counter
 
-Sigil displays the number of human members in a voice channel, excluding bots. The channel is configured per server with `/member-counter channel`, which requires Manage Server. Sigil needs View Channel and Manage Channels on the selected channel and the Server Members Intent. Settings are stored in SQLite and survive restarts and deployments. The IUI Overwatch channel is seeded on first startup; later command changes are preserved. Counts refresh at startup and every ten minutes. Discord groups voice channels beneath text channels in a category.
+Sigil displays the number of human members in a voice channel, excluding bots. The channel is configured per server with `/member-counter channel`, which requires Manage Server. Sigil needs View Channel and Manage Channels on the selected channel and the Server Members Intent. Settings are stored in SQLite and survive restarts and deployments. An existing IUI Overwatch setting is preserved; use the command to configure new servers or change a channel. Counts refresh at startup and every ten minutes. Discord groups voice channels beneath text channels in a category.

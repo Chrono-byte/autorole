@@ -25,7 +25,7 @@ describe("server counters", () => {
   });
 });
 
-test("IUI seed is preserved only until an administrator changes it", async () => {
+test("counter settings persist across restarts without a bootstrap", async () => {
   const { mkdtempSync, rmSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
@@ -37,9 +37,7 @@ test("IUI seed is preserved only until an administrator changes it", async () =>
       Effect.scoped(
         Effect.gen(function* () {
           const store = yield* StatsStore.make(path);
-          expect(yield* store.list()).toEqual([
-            { guildId: "1415400507006124093", channelId: "1566691860234371203" },
-          ]);
+          expect(yield* store.list()).toEqual([]);
           yield* store.set("1415400507006124093", "replacement");
           yield* store.set("another-server", "another-channel");
         }),
@@ -82,9 +80,7 @@ test("counter command requires Manage Server at execution time", async () => {
         } as unknown as import("discord.js").ChatInputCommandInteraction;
         const result = yield* Effect.result(registry.dispatch(interaction));
         expect(Result.isFailure(result)).toBe(true);
-        expect(yield* store.list()).toEqual([
-          { guildId: "1415400507006124093", channelId: "1566691860234371203" },
-        ]);
+        expect(yield* store.list()).toEqual([]);
         expect(serverStatsCommands(store).definitions[0]?.toJSON()).toMatchObject({
           default_member_permissions: PermissionFlagsBits.ManageGuild.toString(),
         });
