@@ -283,46 +283,53 @@ function fixture() {
   };
 }
 
-test("active and closed suggestion mappings persist across restart", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "suggestions-"));
-  const path = join(dir, "data.sqlite");
-  try {
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const store = yield* SuggestionStore.make(path);
-          yield* store.put(userId, threadId);
-          expect(yield* store.getByUser(userId)).toEqual({ userId, threadId });
-          expect(yield* store.getByThread(threadId)).toEqual({ userId, threadId });
-          yield* Effect.flip(store.put(userId, "100000000000000004"));
-        }),
-      ),
-    );
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const store = yield* SuggestionStore.make(path);
-          expect(yield* store.getByUser(userId)).toEqual({ userId, threadId });
-          yield* store.close(userId, threadId);
-          expect(yield* store.getByUser(userId)).toBeNull();
-          expect(yield* store.getByThread(threadId)).toBeNull();
-        }),
-      ),
-    );
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const store = yield* SuggestionStore.make(path);
-          expect(yield* store.getPrevious(userId)).toEqual({ userId, threadId });
-          yield* store.put(userId, threadId);
-          expect(yield* store.getByUser(userId)).toEqual({ userId, threadId });
-        }),
-      ),
-    );
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-});
+// Disk-backed SQLite tests include filesystem syncs on shared CI runners.
+const sqliteTestTimeout = 30_000;
+
+test(
+  "active and closed suggestion mappings persist across restart",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "suggestions-"));
+    const path = join(dir, "data.sqlite");
+    try {
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const store = yield* SuggestionStore.make(path);
+            yield* store.put(userId, threadId);
+            expect(yield* store.getByUser(userId)).toEqual({ userId, threadId });
+            expect(yield* store.getByThread(threadId)).toEqual({ userId, threadId });
+            yield* Effect.flip(store.put(userId, "100000000000000004"));
+          }),
+        ),
+      );
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const store = yield* SuggestionStore.make(path);
+            expect(yield* store.getByUser(userId)).toEqual({ userId, threadId });
+            yield* store.close(userId, threadId);
+            expect(yield* store.getByUser(userId)).toBeNull();
+            expect(yield* store.getByThread(threadId)).toBeNull();
+          }),
+        ),
+      );
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const store = yield* SuggestionStore.make(path);
+            expect(yield* store.getPrevious(userId)).toEqual({ userId, threadId });
+            yield* store.put(userId, threadId);
+            expect(yield* store.getByUser(userId)).toEqual({ userId, threadId });
+          }),
+        ),
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+  sqliteTestTimeout,
+);
 
 test("button opens one private conversation, relays both ways, and closes it", async () => {
   const f = fixture();
@@ -577,73 +584,77 @@ test("relayed replies target the corresponding message in both directions and id
   );
 });
 
-test("message links survive restart and edits replace the delivered copy and attachments", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "suggestion-edits-"));
-  const path = join(dir, "data.sqlite");
-  const f = fixture();
-  const original = f.message(
-    "Original",
-    true,
-    new Collection([
-      ["file", { url: "https://cdn.discordapp.com/original.png", name: "original.png" }],
-    ]),
-  );
-  let copyId = "";
-  try {
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const service = yield* Suggestions.make(f.client, path);
-          yield* service.interaction(f.interaction("suggestions:open"));
-          yield* service.message(original);
-          copyId = f.deliveredIds.at(-1)!;
-        }),
-      ),
+test(
+  "message links survive restart and edits replace the delivered copy and attachments",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "suggestion-edits-"));
+    const path = join(dir, "data.sqlite");
+    const f = fixture();
+    const original = f.message(
+      "Original",
+      true,
+      new Collection([
+        ["file", { url: "https://cdn.discordapp.com/original.png", name: "original.png" }],
+      ]),
     );
-    const count = f.sentToThread.length;
-    original.content = "Edited";
-    original.attachments.clear();
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const service = yield* Suggestions.make(f.client, path);
-          const partial = {
-            ...original,
-            partial: true,
-            author: null,
-            fetch: async () => original,
-          } as unknown as Message;
-          yield* service.edited(partial);
-          expect(f.sentToThread).toHaveLength(count);
-          expect(f.deliveredEdits.at(-1)).toMatchObject({
-            channelId: threadId,
-            messageId: copyId,
-            value: {
-              content: "Edited",
-              attachments: [],
-              files: [],
-              embeds: [],
-              threadId,
-            },
-          });
-          const reply = f.message("After restart", false);
-          reply.reference = {
-            channelId: threadId,
-            messageId: copyId,
-            guildId: suggestionGuildId,
-            type: MessageReferenceType.Default,
-          };
-          yield* service.message(reply);
-          expect(f.dms.at(-1)).toMatchObject({ reply: { messageReference: original.id } });
-          yield* service.edited(f.message("Unrelated", true));
-          expect(f.deliveredEdits).toHaveLength(1);
-        }),
-      ),
-    );
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-});
+    let copyId = "";
+    try {
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const service = yield* Suggestions.make(f.client, path);
+            yield* service.interaction(f.interaction("suggestions:open"));
+            yield* service.message(original);
+            copyId = f.deliveredIds.at(-1)!;
+          }),
+        ),
+      );
+      const count = f.sentToThread.length;
+      original.content = "Edited";
+      original.attachments.clear();
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const service = yield* Suggestions.make(f.client, path);
+            const partial = {
+              ...original,
+              partial: true,
+              author: null,
+              fetch: async () => original,
+            } as unknown as Message;
+            yield* service.edited(partial);
+            expect(f.sentToThread).toHaveLength(count);
+            expect(f.deliveredEdits.at(-1)).toMatchObject({
+              channelId: threadId,
+              messageId: copyId,
+              value: {
+                content: "Edited",
+                attachments: [],
+                files: [],
+                embeds: [],
+                threadId,
+              },
+            });
+            const reply = f.message("After restart", false);
+            reply.reference = {
+              channelId: threadId,
+              messageId: copyId,
+              guildId: suggestionGuildId,
+              type: MessageReferenceType.Default,
+            };
+            yield* service.message(reply);
+            expect(f.dms.at(-1)).toMatchObject({ reply: { messageReference: original.id } });
+            yield* service.edited(f.message("Unrelated", true));
+            expect(f.deliveredEdits).toHaveLength(1);
+          }),
+        ),
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+  sqliteTestTimeout,
+);
 
 test("closing refreshes controls and closed messages get a reopen action without delivery", async () => {
   const f = fixture();
@@ -691,46 +702,50 @@ test("the new suggestion choice skips recovery", async () => {
   );
 });
 
-test("old replies cannot be delivered into a different active suggestion", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "suggestion-replies-"));
-  const path = join(dir, "data.sqlite");
-  const f = fixture();
-  const oldThread = "100000000000000009";
-  try {
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const store = yield* SuggestionStore.make(path);
-          yield* store.remember(userId, oldThread);
-          yield* store.put(userId, threadId);
-          yield* store.linkMessage({
-            threadId: oldThread,
-            sourceId: "old-source",
-            sourceChannelId: oldThread,
-            authorId: officerId,
-            destinationId: "old-copy",
-            destinationChannelId: "dm",
-          });
-          const service = yield* Suggestions.make(f.client, path);
-          const reply = f.message("Wrong conversation", true);
-          reply.reference = {
-            messageId: "old-copy",
-            channelId: "dm",
-            guildId: undefined,
-            type: MessageReferenceType.Default,
-          };
-          yield* service.message(reply);
-          expect(f.sentToThread).toHaveLength(0);
-          expect(f.errors.at(-1)).toContain("another suggestion");
-          yield* service.interaction(f.interaction(`suggestions:reopen:${oldThread}`, true));
-          expect(f.edits.at(-1)).toContain("Close the current suggestion");
-        }),
-      ),
-    );
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-});
+test(
+  "old replies cannot be delivered into a different active suggestion",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "suggestion-replies-"));
+    const path = join(dir, "data.sqlite");
+    const f = fixture();
+    const oldThread = "100000000000000009";
+    try {
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const store = yield* SuggestionStore.make(path);
+            yield* store.remember(userId, oldThread);
+            yield* store.put(userId, threadId);
+            yield* store.linkMessage({
+              threadId: oldThread,
+              sourceId: "old-source",
+              sourceChannelId: oldThread,
+              authorId: officerId,
+              destinationId: "old-copy",
+              destinationChannelId: "dm",
+            });
+            const service = yield* Suggestions.make(f.client, path);
+            const reply = f.message("Wrong conversation", true);
+            reply.reference = {
+              messageId: "old-copy",
+              channelId: "dm",
+              guildId: undefined,
+              type: MessageReferenceType.Default,
+            };
+            yield* service.message(reply);
+            expect(f.sentToThread).toHaveLength(0);
+            expect(f.errors.at(-1)).toContain("another suggestion");
+            yield* service.interaction(f.interaction(`suggestions:reopen:${oldThread}`, true));
+            expect(f.edits.at(-1)).toContain("Close the current suggestion");
+          }),
+        ),
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+  sqliteTestTimeout,
+);
 
 test("a different member cannot reopen a closed conversation", async () => {
   const f = fixture();
@@ -810,37 +825,41 @@ test("editing a message from a deleted webhook reports failure without creating 
   );
 });
 
-test("messages originally delivered by the bot still use bot edits", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "suggestion-bot-edits-"));
-  const path = join(dir, "data.sqlite");
-  const f = fixture();
-  const original = f.message("Original bot delivery", true);
-  try {
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const store = yield* SuggestionStore.make(path);
-          yield* store.put(userId, threadId);
-          yield* store.linkMessage({
-            threadId,
-            sourceId: original.id,
-            sourceChannelId: "dm",
-            authorId: userId,
-            destinationId: "bot-copy",
-            destinationChannelId: threadId,
-          });
-          const service = yield* Suggestions.make(f.client, path);
-          original.content = "Edited legacy copy";
-          yield* service.edited(original);
-          expect(f.webhookEdits).toHaveLength(0);
-          expect(f.deliveredEdits.at(-1)).toMatchObject({
-            messageId: "bot-copy",
-            value: { embeds: [{ data: { description: "Edited legacy copy" } }] },
-          });
-        }),
-      ),
-    );
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-});
+test(
+  "messages originally delivered by the bot still use bot edits",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "suggestion-bot-edits-"));
+    const path = join(dir, "data.sqlite");
+    const f = fixture();
+    const original = f.message("Original bot delivery", true);
+    try {
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const store = yield* SuggestionStore.make(path);
+            yield* store.put(userId, threadId);
+            yield* store.linkMessage({
+              threadId,
+              sourceId: original.id,
+              sourceChannelId: "dm",
+              authorId: userId,
+              destinationId: "bot-copy",
+              destinationChannelId: threadId,
+            });
+            const service = yield* Suggestions.make(f.client, path);
+            original.content = "Edited legacy copy";
+            yield* service.edited(original);
+            expect(f.webhookEdits).toHaveLength(0);
+            expect(f.deliveredEdits.at(-1)).toMatchObject({
+              messageId: "bot-copy",
+              value: { embeds: [{ data: { description: "Edited legacy copy" } }] },
+            });
+          }),
+        ),
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+  sqliteTestTimeout,
+);
