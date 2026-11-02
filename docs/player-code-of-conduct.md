@@ -17,7 +17,7 @@ This code applies to players, substitutes, coaches, and other members when takin
 
 ## Reporting a concern
 
-You can bring a concern to any officer. If it involves an officer, you can go to another officer. Officers will handle reports discreetly and share personal information only as needed to review a concern, allow a fair response, carry out a decision, or meet reporting obligations. They cannot promise absolute confidentiality.
+You can bring a concern to any officer. See [#officers](https://discord.com/channels/1415400507006124093/1564391427746701432) for a list of officers and their Discord contacts. If it involves an officer, you can go to another officer. Officers will handle reports discreetly and share personal information only as needed to review a concern, allow a fair response, carry out a decision, or meet reporting obligations. They cannot promise absolute confidentiality.
 
 Disagreement, good-faith criticism, accidental mistakes, and expression protected by law or university policy are not violations by themselves. Offense or discomfort alone does not justify discipline. Officers must identify the conduct at issue and consider its context, severity, repetition, and effect on participation.
 
