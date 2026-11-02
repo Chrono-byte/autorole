@@ -126,7 +126,7 @@ export class SuggestionMessages {
     if (yield* this.store.getMessage(message.id)) return;
     const user = yield* discordRequest(() => this.client.users.fetch(entry.userId));
     const recipient = fromUser
-      ? "Gamers Hall officers"
+      ? "officers"
       : `${user.globalName ?? user.username} (@${user.username})`;
     const linked = message.reference?.messageId
       ? yield* this.store.getMessage(message.reference.messageId)
@@ -220,7 +220,7 @@ export class SuggestionMessages {
     const user = yield* discordRequest(() => this.client.users.fetch(entry.userId));
     const fromUser = link.sourceChannelId !== link.threadId;
     const recipient = fromUser
-      ? "Gamers Hall officers"
+      ? "officers"
       : `${user.globalName ?? user.username} (@${user.username})`;
     yield* discordRequest(() =>
       destination.messages.edit(link.destinationId, {

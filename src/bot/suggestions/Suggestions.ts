@@ -242,8 +242,7 @@ export class Suggestions {
     const confirmation = yield* Effect.result(
       discordRequest(() =>
         user.send({
-          content:
-            "Your conversation with the Gamers Hall officers is open again. Reply here to continue it.",
+          content: "Your conversation with the officers is open again. Reply here to continue it.",
           components: [conversationButtons(id)],
         }),
       ),
@@ -343,7 +342,7 @@ export class Suggestions {
       const confirmation = yield* discordRequest(() =>
         dm.send({
           content:
-            "You're talking to the Gamers Hall officers. You already have an open suggestion. Reply here to continue it.",
+            "You're talking to the officers. You already have an open suggestion. Reply here to continue it.",
           components: [conversationButtons(entry.threadId)],
         }),
       );
@@ -405,7 +404,7 @@ export class Suggestions {
       const confirmation = yield* discordRequest(() =>
         dm.send({
           content:
-            "You're talking to the Gamers Hall officers. Your conversation is open. Send your suggestion here; officers can reply in this DM. Use the button below when you're finished.",
+            "You're talking to the officers. Your conversation is open. Send your suggestion here; officers can reply in this DM. Use the button below when you're finished.",
           components: [conversationButtons(thread.id)],
         }),
       );
@@ -589,7 +588,7 @@ export class Suggestions {
         discordRequest(async () => {
           const user = await this.client.users.fetch(entry.userId);
           const sent = await user.send({
-            content: "Your conversation with the Gamers Hall officers is closed.",
+            content: "Your conversation with the officers is closed.",
             components: [conversationButtons(entry.threadId, false)],
           });
           return sent;
