@@ -6,14 +6,14 @@ This code applies to players, substitutes, coaches, and other members when takin
 
 ## How we treat each other
 
-1. **Treat people with respect.** Threats, intimidation, bullying, discriminatory harassment, sexual misconduct, and hazing are prohibited as defined by applicable IU policies. Do not discriminate in membership, team opportunities, or participation on any basis prohibited by university policy.
-2. **Keep feedback constructive.** Talk about gameplay, communication, and teamwork without repeatedly ridiculing someone, encouraging others to target them, or disrupting practices, matches, or discussions with personal insults. You can question decisions, discuss performance, and offer good-faith criticism.
-3. **Respect boundaries.** Stop personal jokes, teasing, or unwanted contact when someone asks you to stop. Make a good-faith effort to use people's stated names and pronouns; an accidental mistake alone is not a violation. Do not share someone's private information without permission to threaten, intimidate, or expose them to unwanted contact. You may keep and share relevant evidence when reporting a concern or responding to an allegation.
-4. **Do not retaliate.** Do not threaten, intimidate, or penalize someone for making a good-faith report, providing evidence, participating in a review, or refusing to participate in misconduct. You can make a report in good faith even if the evidence does not establish a violation. Nobody has to confront someone or try mediation before making a report.
-5. **Play fair.** Follow game, tournament, and league rules. Do not cheat, intentionally sabotage play, or threaten or harass opponents or other participants.
-6. **Take a break when you need one.** Life can be frustrating. If you need to pause or ask for support, do so. Feeling frustrated or having a single emotional reaction is not a violation, but you are still responsible for how you treat others.
-7. **Communicate respectfully.** Be clear and respectful in person and online, including when you disagree. Good-faith criticism and disagreement are welcome.
-8. **Own your actions.** Take responsibility for your conduct during organization activities and related conversations, including outside games. When appropriate, acknowledge mistakes, follow decisions made under the applicable procedures, and take reasonable steps to repair harm.
+1. **Communicate respectfully.** Be clear and respectful in person and online, including when you disagree. Good-faith criticism and disagreement are welcome.
+2. **Treat people with respect.** Threats, intimidation, bullying, discriminatory harassment, sexual misconduct, and hazing are prohibited as defined by applicable IU policies. Do not discriminate in membership, team opportunities, or participation on any basis prohibited by university policy.
+3. **Keep feedback constructive.** Don't repeatedly ridicule a teammate, encourage others to target them, or disrupt practices, matches, or discussions with personal insults.
+4. **Respect boundaries.** Stop personal jokes, teasing, or unwanted contact when someone asks you to stop. Make a good-faith effort to use people's stated names and pronouns; an accidental mistake alone is not a violation. Do not share someone's private information without permission to threaten, intimidate, or expose them to unwanted contact. You may keep and share relevant evidence when reporting a concern or responding to an allegation.
+5. **Do not retaliate.** Do not threaten, intimidate, or penalize someone for making a good-faith report, providing evidence, participating in a review, or refusing to participate in misconduct. You can make a report in good faith even if the evidence does not establish a violation. Nobody has to confront someone or try mediation before making a report.
+6. **Play fair.** Follow game, tournament, and league rules. Do not cheat, intentionally sabotage play, or threaten or harass opponents or other participants.
+7. **Handle frustration without mistreating others.** Feeling frustrated or having a single emotional reaction is not a violation, but you are still responsible for how you treat people.
+8. **Take responsibility.** These rules apply during organization activities and related conversations, including outside games. When appropriate, acknowledge mistakes, follow decisions made under the applicable procedures, and take reasonable steps to repair harm.
 
 ## Reporting a concern
 
