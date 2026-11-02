@@ -63,3 +63,7 @@ bun run avatar ./athena.png           # Update the bot avatar from a PNG; requir
 ```
 
 Command cleanup preserves `/autorole`, `/autorole-target`, `/preban`, `/sync-roster`, and context-menu commands.
+
+## Server member counter
+
+Sigil displays the number of human members in a voice channel, excluding bots. The channel is configured per server with `/member-counter channel`, which requires Manage Server. Sigil needs View Channel and Manage Channels on the selected channel and the Server Members Intent. Settings are stored in SQLite and survive restarts and deployments. The IUI Overwatch channel is seeded on first startup; later command changes are preserved. Counts refresh at startup and every ten minutes. Discord groups voice channels beneath text channels in a category.

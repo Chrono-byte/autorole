@@ -13,6 +13,7 @@ import { DiscordRequestError } from "../errors";
 import { type Configuration } from "../config/Configuration";
 import { logError, logInfo } from "../logger";
 import { notifyReady } from "./notifyReady";
+import { serverMemberCounter } from "./ServerStats";
 
 const MINUTE_MS = 60_000;
 const reportHandler = (error: Error) =>
@@ -76,6 +77,9 @@ export const runAutorole = Effect.fn("Autorole.run")(function* (configuration: C
         (readyClient) =>
           Effect.gen(function* () {
             yield* Effect.forkIn(scope, { startImmediately: true })(autorole.start);
+            yield* Effect.forkIn(scope, { startImmediately: true })(
+              serverMemberCounter(readyClient, autorole.stats),
+            );
             yield* Effect.forkIn(scope, { startImmediately: true })(
               rotatePresence(readyClient, "Overwatch", overwatchStatuses, MINUTE_MS),
             );

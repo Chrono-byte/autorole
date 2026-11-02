@@ -1,10 +1,12 @@
 import { Events, type Client } from "discord.js";
 import { Effect } from "effect";
-import { buttonEvent, event } from "@autorole/discord-framework";
+import { buttonEvent, event, CommandRegistry } from "@autorole/discord-framework";
 import { makeCommandRegistry } from "./commands/AutoroleCommands";
 import { OutstandingAssignments } from "./assignments/OutstandingAssignments";
 import { RoleService } from "./RoleService";
 import { Suggestions } from "./suggestions/Suggestions";
+import { StatsStore } from "./StatsStore";
+import { serverStatsCommands } from "./commands/ServerStatsCommand";
 
 export const makeAutorole = Effect.fn("Autorole.make")(function* (
   client: Client,
@@ -26,8 +28,12 @@ export const makeAutorole = Effect.fn("Autorole.make")(function* (
     client,
     options.path === ":memory:" ? ":memory:" : `${options.path}.suggestions`,
   );
+  const stats = yield* StatsStore.make(
+    options.path === ":memory:" ? ":memory:" : `${options.path}.stats`,
+  );
   return {
-    commands: makeCommandRegistry(roles),
+    stats,
+    commands: CommandRegistry.combine([makeCommandRegistry(roles), serverStatsCommands(stats)]),
     start: assignments.start(),
     events: [
       buttonEvent(

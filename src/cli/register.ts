@@ -20,7 +20,7 @@ class CommandRegistrar {
       );
       yield* Effect.sync(() =>
         process.stdout.write(
-          "Registered /autorole, /autorole-target, /preban, and /sync-roster. Select the target role in Server Settings > Integrations.\n",
+          "Registered /autorole, /autorole-target, /preban, /sync-roster, and /member-counter. Select the target role in Server Settings > Integrations.\n",
         ),
       );
     });
