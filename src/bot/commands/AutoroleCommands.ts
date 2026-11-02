@@ -18,6 +18,7 @@ import {
 import { logError } from "../../logger";
 import { RoleService } from "../RoleService";
 import { syncRoster } from "./syncRoster";
+import { guidelinesDefinition, guidelinesStatusDefinition } from "../guidelines/GuidelinesCommand";
 import { serverStatsDefinition } from "./ServerStatsCommand";
 
 const statusDefinition = new SlashCommandBuilder()
@@ -106,7 +107,12 @@ const catalog = new CommandCatalog<RoleService>([
   },
 ]);
 
-export const commandDefinitions = [...catalog.definitions, serverStatsDefinition];
+export const commandDefinitions = [
+  ...catalog.definitions,
+  serverStatsDefinition,
+  guidelinesDefinition,
+  guidelinesStatusDefinition,
+];
 
 export function makeCommandRegistry(roles: RoleService) {
   return catalog.bind(roles);

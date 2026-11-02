@@ -7,6 +7,13 @@ import { RoleService } from "./RoleService";
 import { Suggestions } from "./suggestions/Suggestions";
 import { StatsStore } from "./StatsStore";
 import { automaticRosterMember, rosterChanged } from "./AutomaticRoster";
+import { automaticTeamGate, teamRolesFromEnv } from "./guidelines/TeamGate";
+import { AgreementStore } from "./guidelines/AgreementStore";
+import {
+  guidelinesButton,
+  guidelinesCommands,
+  isGuidelinesButton,
+} from "./guidelines/GuidelinesCommand";
 import { serverStatsCommands } from "./commands/ServerStatsCommand";
 
 export const makeAutorole = Effect.fn("Autorole.make")(function* (
@@ -32,11 +39,21 @@ export const makeAutorole = Effect.fn("Autorole.make")(function* (
   const stats = yield* StatsStore.make(
     options.path === ":memory:" ? ":memory:" : `${options.path}.stats`,
   );
+  const agreements = yield* AgreementStore.make(
+    options.path === ":memory:" ? ":memory:" : `${options.path}.guidelines`,
+  );
+  const pendingTeams = teamRolesFromEnv();
   return {
     stats,
-    commands: CommandRegistry.combine([makeCommandRegistry(roles), serverStatsCommands(stats)]),
+    commands: CommandRegistry.combine([
+      makeCommandRegistry(roles),
+      serverStatsCommands(stats),
+      guidelinesCommands(agreements),
+    ]),
     start: assignments.start(),
+    teamGate: pendingTeams ? automaticTeamGate(client, agreements, pendingTeams) : Effect.void,
     events: [
+      buttonEvent(isGuidelinesButton, (interaction) => guidelinesButton(agreements, interaction)),
       buttonEvent(
         (interaction) => interaction.customId.startsWith("suggestions:"),
         (interaction) => suggestions.interaction(interaction),

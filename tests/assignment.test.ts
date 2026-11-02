@@ -284,6 +284,8 @@ test("command definitions serialize without constructing runtime dependencies", 
     "autorole",
     "autorole-target",
     "member-counter",
+    "guidelines-renew",
+    "guidelines-status",
   ]);
   expect(
     commandDefinitions.find((definition) => definition.name === "autorole-target")?.toJSON(),

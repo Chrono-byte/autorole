@@ -67,3 +67,13 @@ Command cleanup preserves `/autorole`, `/autorole-target`, `/preban`, `/sync-ros
 ## Server member counter
 
 Sigil displays the number of human members in a voice channel, excluding bots. The channel is configured per server with `/member-counter channel`, which requires Manage Server. Sigil needs View Channel and Manage Channels on the selected channel and the Server Members Intent. Settings are stored in SQLite and survive restarts and deployments. An existing IUI Overwatch setting is preserved; use the command to configure new servers or change a channel. Counts refresh at startup and every ten minutes. Discord groups voice channels beneath text channels in a category.
+
+## Guidelines agreements
+
+After posting the approved guidelines in a message sent by the bot, an officer with Manage Server can run `/guidelines-renew` in that channel with the semester, document version, and message ID. The command adds an Agree button and starts a new period; previous agreement records remain in the bot's guidelines database. Each button records the member and agreement date for that period. Earlier buttons stop accepting agreements when a new period starts.
+
+The IUI pending role IDs are configured by default. To override them, set `GUIDELINES_PENDING_CRIMSON`, `GUIDELINES_PENDING_WHITE`, and `GUIDELINES_PENDING_BLACK` together to distinct existing role IDs. Pending roles must have no server permissions, be manageable by the bot, and be allowed to see the shared Teams category and its channels. They must not be able to view private team channels. The bot also needs permission to manage each team role.
+
+When a period starts, the bot checks members on startup and every minute. It swaps each unacknowledged member's team roles for corresponding pending roles, then restores them after agreement. One pending role is needed for each team a member belongs to; removing that pending role removes the corresponding pending team assignment. `/guidelines-status` privately lists outstanding agreements or a member's agreement history. The temporary pilot's local records are separate and are not migrated automatically.
+
+Discord updates are not atomic. Access can remain until reconciliation finishes, and failures are reported and retried. Existing captain, coach, advisor, other role grants, and member-specific allows can independently grant team-channel access; the bot reports unacknowledged non-administrators with such permissions as conflicts but does not remove those roles or overrides. Administrators bypass channel restrictions. Review these conflicts and the server's permissions before relying on the gate.

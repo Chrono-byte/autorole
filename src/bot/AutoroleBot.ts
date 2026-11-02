@@ -78,6 +78,7 @@ export const runAutorole = Effect.fn("Autorole.run")(function* (configuration: C
         (readyClient) =>
           Effect.gen(function* () {
             yield* Effect.forkIn(scope, { startImmediately: true })(autorole.start);
+            yield* Effect.forkIn(scope, { startImmediately: true })(autorole.teamGate);
             yield* Effect.forkIn(scope, { startImmediately: true })(automaticRoster(readyClient));
             yield* Effect.forkIn(scope, { startImmediately: true })(
               serverMemberCounter(readyClient, autorole.stats),

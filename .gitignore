@@ -31,3 +31,6 @@ data/
 .tmp/
 
 __pycache__/
+
+# Local Gamers Hall draft
+docs/gamers-hall-code-of-conduct.md
