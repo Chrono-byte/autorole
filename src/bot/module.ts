@@ -35,6 +35,7 @@ export const makeAutorole = Effect.fn("Autorole.make")(function* (
         (interaction) => suggestions.interaction(interaction),
       ),
       event(Events.MessageCreate, (message) => suggestions.message(message)),
+      event(Events.MessageUpdate, (_before, message) => suggestions.edited(message)),
       event(Events.GuildMemberAdd, (member) => assignments.observeJoin(member)),
       event(Events.GuildMemberUpdate, (before, member) =>
         before.pending && !member.pending ? assignments.observe(member) : Effect.void,

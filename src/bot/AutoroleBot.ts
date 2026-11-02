@@ -47,7 +47,7 @@ export const runAutorole = Effect.fn("Autorole.run")(function* (configuration: C
         GatewayIntentBits.DirectMessages,
         GatewayIntentBits.MessageContent,
       ],
-      partials: [Partials.Channel],
+      partials: [Partials.Channel, Partials.Message],
     },
     (discordClient) => discordRequest(() => discordClient.destroy()).pipe(Effect.ignore),
   );

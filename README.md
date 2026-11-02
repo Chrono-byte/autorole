@@ -42,9 +42,13 @@ Use `/preban` with a Discord user ID and an optional reason to ban a user before
 
 ## Suggestions
 
-In the IUI server, the button in `#suggestions` opens a private DM with Sigil and an officer thread. Officers and the esports advisor can read and reply to suggestions, as can server administrators. Each person can have one open conversation; the member or a moderator can close it with the button. Text and attachments are forwarded, and a ✅ reaction means the message was delivered.
+In the IUI server, the button in `#suggestions` opens a private DM with Sigil and an officer thread. Officers and the esports advisor can read and reply to suggestions, as can server administrators. Each person can have one open conversation; the member or a moderator can close or reopen it with the buttons. The panel offers a choice to continue a previous suggestion or start a new one.
 
-Active conversation mappings are stored alongside the assignment database in a separate SQLite file. Messages sent while the bot is offline are not automatically replayed; resend messages that never receive a ✅ after it returns. Enable Discord's **Message Content Intent** and the bot's server-member intent. The officer inbox must remain private and inside the Officers category.
+Member messages appear in officer threads under their name and avatar through a bot-owned webhook. Officer replies arrive in DMs with the officer's name, username, and avatar. Text and attachments are relayed without delivery reactions. Edits update the delivered copy. Replies in DMs use native Discord replies; replies relayed into threads include a quote linked to the corresponding message.
+
+Conversation history and message links are stored alongside the assignment database in a separate SQLite file, so closing, reopening, replies, and edits survive restarts. Edit and reply matching applies to messages relayed after this feature was installed. Messages and edits made while the bot is offline are not automatically replayed.
+
+Enable Discord's **Message Content Intent** and the bot's server-member intent. The officer inbox must remain private and inside the Officers category. Grant Sigil **Manage Webhooks** in the inbox channel; it creates and reuses its own webhook there. Webhook tokens are fetched from Discord rather than saved in SQLite.
 
 After deploying the bot, run `bun run setup:suggestions` with Sigil's token and application ID configured. This installs or updates the button and prevents members from posting publicly in `#suggestions`.
 
