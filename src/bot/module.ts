@@ -7,7 +7,7 @@ import { RoleService } from "./RoleService";
 import { Suggestions } from "./suggestions/Suggestions";
 import { StatsStore } from "./StatsStore";
 import { automaticRosterMember, rosterChanged } from "./AutomaticRoster";
-import { automaticTeamGate, teamRolesFromEnv } from "./guidelines/TeamGate";
+import { rosterGuildId } from "./commands/syncRoster";
 import { AgreementStore } from "./guidelines/AgreementStore";
 import {
   guidelinesButton,
@@ -42,7 +42,7 @@ export const makeAutorole = Effect.fn("Autorole.make")(function* (
   const agreements = yield* AgreementStore.make(
     options.path === ":memory:" ? ":memory:" : `${options.path}.guidelines`,
   );
-  const pendingTeams = teamRolesFromEnv();
+  yield* agreements.deactivate(rosterGuildId);
   return {
     stats,
     commands: CommandRegistry.combine([
@@ -51,7 +51,7 @@ export const makeAutorole = Effect.fn("Autorole.make")(function* (
       guidelinesCommands(agreements),
     ]),
     start: assignments.start(),
-    teamGate: pendingTeams ? automaticTeamGate(client, agreements, pendingTeams) : Effect.void,
+    teamGate: Effect.void,
     events: [
       buttonEvent(isGuidelinesButton, (interaction) => guidelinesButton(agreements, interaction)),
       buttonEvent(

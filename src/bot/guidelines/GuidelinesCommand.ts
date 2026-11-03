@@ -1,14 +1,11 @@
 import {
-  ActionRowBuilder,
   ApplicationIntegrationType,
-  ButtonBuilder,
-  ButtonStyle,
   InteractionContextType,
   PermissionFlagsBits,
   SlashCommandBuilder,
   type ButtonInteraction,
 } from "discord.js";
-import { Effect, Result } from "effect";
+import { Effect } from "effect";
 import {
   CommandRegistry,
   deferEphemeral,
@@ -16,12 +13,11 @@ import {
   editResponse,
   replyEphemeral,
 } from "@autorole/discord-framework";
-import { reconcileTeamGate, teamRolesFromEnv, validateTeamGate } from "./TeamGate";
+import { teamRolesFromEnv } from "./TeamGate";
 import { rosterGuildId } from "../commands/syncRoster";
 import { AgreementStore } from "./AgreementStore";
 
 const prefix = "guidelines:agree:";
-const guidelinesChannelId = "1566875132658458675";
 export const guidelinesDefinition = new SlashCommandBuilder()
   .setName("guidelines-renew")
   .setDescription("Start a new guidelines agreement period")
@@ -117,86 +113,7 @@ export function guidelinesCommands(store: AgreementStore) {
     {
       definition: guidelinesDefinition,
       permissions: { guildOnly: true, member: PermissionFlagsBits.ManageGuild },
-      run: (interaction) =>
-        Effect.gen(function* () {
-          const guildId = interaction.guildId;
-          const period = interaction.options.getString("period", true).trim();
-          const version = interaction.options.getString("version", true).trim();
-          const messageId = interaction.options.getString("message-id", true).trim();
-          if (!guildId || !period || !version || !/^\d{17,20}$/.test(messageId))
-            return yield* replyEphemeral(
-              interaction,
-              "Enter a valid agreement message ID, period, and version.",
-            );
-          const mapping = teamRolesFromEnv();
-          const guild = interaction.guild;
-          if (guildId !== rosterGuildId || !mapping || !guild)
-            return yield* replyEphemeral(
-              interaction,
-              "Configure all three pending team roles before starting a renewal in the Overwatch server.",
-            );
-          yield* deferEphemeral(interaction);
-          const validation = yield* Effect.result(validateTeamGate(guild, mapping));
-          if (Result.isFailure(validation))
-            return yield* editResponse(
-              interaction,
-              `Cannot start renewal: ${validation.failure.message}`,
-            );
-          const channel = yield* discordRequest(() => guild.channels.fetch(guidelinesChannelId));
-          if (!channel || !channel.isTextBased() || !("messages" in channel))
-            return yield* editResponse(interaction, "The team-guidelines channel is unavailable.");
-          const fetched = yield* Effect.result(
-            discordRequest(() => channel.messages.fetch(messageId)),
-          );
-          if (Result.isFailure(fetched)) {
-            if (fetched.failure.code === 10008)
-              return yield* editResponse(
-                interaction,
-                "Message not found in #team-guidelines. Copy the ID of the Agree message and try again.",
-              );
-            return yield* fetched.failure;
-          }
-          const message = fetched.success;
-          if (message.author.id !== interaction.client.user.id)
-            return yield* editResponse(
-              interaction,
-              "Choose a guidelines message sent by this bot.",
-            );
-          const id = interaction.id;
-          const button = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder()
-              .setCustomId(`${prefix}${id}`)
-              .setLabel("Agree")
-              .setStyle(ButtonStyle.Primary),
-          );
-          yield* discordRequest(() => message.edit({ components: [button] }));
-          yield* store.startPeriod({
-            id,
-            guildId,
-            channelId: channel.id,
-            messageId,
-            period,
-            version,
-            startedAt: interaction.createdTimestamp,
-          });
-          const result = yield* Effect.result(reconcileTeamGate(guild, store, mapping));
-          if (Result.isFailure(result))
-            return yield* editResponse(
-              interaction,
-              `Started ${period}, but team role reconciliation failed: ${result.failure.message}. The bot will retry.`,
-            );
-          const { failed, conflicts } = result.success;
-          const detail = [
-            ...failed.map((memberId) => `Update failed: ${memberId}`),
-            ...conflicts.map((memberId) => `Permission bypass: ${memberId}`),
-          ]
-            .join("\n")
-            .slice(0, 1500);
-          yield* editResponse(
-            interaction,
-            `Started ${period} for version ${version}. ${failed.length} updates failed; ${conflicts.length} members have bypassing overrides.${detail ? `\n${detail}` : ""}`,
-          );
-        }),
+      run: (interaction) => replyEphemeral(interaction, "Agreement renewal is disabled."),
     },
   ]);
 }

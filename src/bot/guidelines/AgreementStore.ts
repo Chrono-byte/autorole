@@ -58,6 +58,12 @@ export class AgreementStore {
     return new AgreementStore(db);
   });
 
+  deactivate(guildId: string) {
+    return operation("deactivateAgreementPeriod", () => {
+      this.db.run("DELETE FROM guideline_active_period WHERE guildId = ?", [guildId]);
+    });
+  }
+
   startPeriod(input: {
     id: string;
     guildId: string;
