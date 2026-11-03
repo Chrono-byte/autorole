@@ -21,6 +21,7 @@ import { rosterGuildId } from "../commands/syncRoster";
 import { AgreementStore } from "./AgreementStore";
 
 const prefix = "guidelines:agree:";
+const guidelinesChannelId = "1566875132658458675";
 export const guidelinesDefinition = new SlashCommandBuilder()
   .setName("guidelines-renew")
   .setDescription("Start a new guidelines agreement period")
@@ -44,7 +45,7 @@ export const guidelinesDefinition = new SlashCommandBuilder()
   .addStringOption((o) =>
     o
       .setName("message-id")
-      .setDescription("ID of the bot's guidelines message in this channel")
+      .setDescription("ID of the bot's agreement message in team-guidelines")
       .setRequired(true),
   );
 
@@ -119,37 +120,43 @@ export function guidelinesCommands(store: AgreementStore) {
       run: (interaction) =>
         Effect.gen(function* () {
           const guildId = interaction.guildId;
-          const channel = interaction.channel;
           const period = interaction.options.getString("period", true).trim();
           const version = interaction.options.getString("version", true).trim();
           const messageId = interaction.options.getString("message-id", true).trim();
-          if (
-            !guildId ||
-            !channel ||
-            !channel.isTextBased() ||
-            !("messages" in channel) ||
-            !period ||
-            !version ||
-            !/^\d{17,20}$/.test(messageId)
-          )
+          if (!guildId || !period || !version || !/^\d{17,20}$/.test(messageId))
             return yield* replyEphemeral(
               interaction,
-              "Run this in the guidelines channel with a valid message ID, period, and version.",
+              "Enter a valid agreement message ID, period, and version.",
             );
           const mapping = teamRolesFromEnv();
-          if (guildId !== rosterGuildId || !mapping || !interaction.guild)
+          const guild = interaction.guild;
+          if (guildId !== rosterGuildId || !mapping || !guild)
             return yield* replyEphemeral(
               interaction,
               "Configure all three pending team roles before starting a renewal in the Overwatch server.",
             );
           yield* deferEphemeral(interaction);
-          const validation = yield* Effect.result(validateTeamGate(interaction.guild, mapping));
+          const validation = yield* Effect.result(validateTeamGate(guild, mapping));
           if (Result.isFailure(validation))
             return yield* editResponse(
               interaction,
               `Cannot start renewal: ${validation.failure.message}`,
             );
-          const message = yield* discordRequest(() => channel.messages.fetch(messageId));
+          const channel = yield* discordRequest(() => guild.channels.fetch(guidelinesChannelId));
+          if (!channel || !channel.isTextBased() || !("messages" in channel))
+            return yield* editResponse(interaction, "The team-guidelines channel is unavailable.");
+          const fetched = yield* Effect.result(
+            discordRequest(() => channel.messages.fetch(messageId)),
+          );
+          if (Result.isFailure(fetched)) {
+            if (fetched.failure.code === 10008)
+              return yield* editResponse(
+                interaction,
+                "Message not found in #team-guidelines. Copy the ID of the Agree message and try again.",
+              );
+            return yield* fetched.failure;
+          }
+          const message = fetched.success;
           if (message.author.id !== interaction.client.user.id)
             return yield* editResponse(
               interaction,
@@ -172,7 +179,7 @@ export function guidelinesCommands(store: AgreementStore) {
             version,
             startedAt: interaction.createdTimestamp,
           });
-          const result = yield* Effect.result(reconcileTeamGate(interaction.guild, store, mapping));
+          const result = yield* Effect.result(reconcileTeamGate(guild, store, mapping));
           if (Result.isFailure(result))
             return yield* editResponse(
               interaction,

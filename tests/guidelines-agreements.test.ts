@@ -199,3 +199,114 @@ test("team role swaps preserve assignments and report bypassing overwrites", asy
     ),
   );
 });
+
+test("renewal run in general fetches the agreement message in team-guidelines", async () => {
+  const { ChannelType, Collection, PermissionFlagsBits, PermissionsBitField } =
+    await import("discord.js");
+  const { guidelinesCommands } = await import("../src/bot/guidelines/GuidelinesCommand");
+  const { teamRolesFromEnv } = await import("../src/bot/guidelines/TeamGate");
+  const { rosterGuildId } = await import("../src/bot/commands/syncRoster");
+  const mapping = teamRolesFromEnv({});
+  if (!mapping) throw new Error("Missing configured team roles");
+  const allRoles = new Collection(
+    mapping
+      .flatMap(({ team, pending }) => [team, pending])
+      .map((id) => [id, { id, managed: false, permissions: new PermissionsBitField(0n) }]),
+  );
+  const view = new PermissionsBitField(PermissionFlagsBits.ViewChannel),
+    none = new PermissionsBitField(0n);
+  const categories = mapping.map(({ category, team }) => ({
+    id: category,
+    type: ChannelType.GuildCategory,
+    parentId: null,
+    permissionOverwrites: {
+      cache: new Collection([
+        [rosterGuildId, { id: rosterGuildId, type: 0, deny: view, allow: none }],
+        [team, { id: team, type: 0, deny: none, allow: view }],
+      ]),
+    },
+    permissionsFor: () => none,
+  }));
+  const shared = {
+    id: "1565003638852550768",
+    type: ChannelType.GuildCategory,
+    parentId: null,
+    permissionsFor: () => view,
+  };
+  const messageId = "1566934537160761357",
+    guidelinesId = "1566875132658458675";
+  let edited = false;
+  const message = {
+    author: { id: "bot" },
+    edit: async () => {
+      edited = true;
+    },
+  };
+  const guidelines = {
+    id: guidelinesId,
+    type: ChannelType.GuildText,
+    parentId: shared.id,
+    isTextBased: () => true,
+    permissionsFor: () => view,
+    messages: {
+      fetch: async (id: string) => {
+        if (id !== messageId) throw Error("Unknown Message");
+        return message;
+      },
+    },
+  };
+  const general = {
+    id: "general",
+    isTextBased: () => true,
+    messages: {
+      fetch: async () => {
+        throw Error("Unknown Message");
+      },
+    },
+  };
+  const channels = new Collection(
+    [...categories, shared, guidelines].map((channel) => [channel.id, channel]),
+  );
+  const guild = {
+    id: rosterGuildId,
+    roles: { fetch: async () => allRoles },
+    channels: { fetch: async (id?: string) => (id ? channels.get(id) : channels) },
+    members: {
+      fetchMe: async () => ({
+        permissions: new PermissionsBitField(PermissionFlagsBits.ManageRoles),
+        roles: { highest: { comparePositionTo: () => 1 } },
+      }),
+      list: async () => new Collection(),
+    },
+  };
+  const responses: string[] = [];
+  const interaction = {
+    commandName: "guidelines-renew",
+    guildId: rosterGuildId,
+    guild,
+    channel: general,
+    id: "period-id",
+    createdTimestamp: 123,
+    client: { user: { id: "bot" } },
+    memberPermissions: new PermissionsBitField(PermissionFlagsBits.ManageGuild),
+    options: {
+      getString: (name: string) =>
+        ({ period: "Fall", version: "v1", "message-id": messageId })[name],
+    },
+    deferReply: async () => {},
+    editReply: async (text: string) => {
+      responses.push(text);
+    },
+  } as unknown as import("discord.js").ChatInputCommandInteraction;
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* AgreementStore.make(":memory:");
+        yield* guidelinesCommands(store).dispatch(interaction);
+        expect(edited).toBe(true);
+        expect((yield* store.active(rosterGuildId))?.channelId).toBe(guidelinesId);
+        expect(responses.at(-1)).toContain("Started Fall");
+      }),
+    ),
+  );
+});

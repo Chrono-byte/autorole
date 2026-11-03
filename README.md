@@ -70,7 +70,7 @@ Sigil displays the number of human members in a voice channel, excluding bots. T
 
 ## Guidelines agreements
 
-After posting the approved guidelines in a message sent by the bot, an officer with Manage Server can run `/guidelines-renew` in that channel with the semester, document version, and message ID. The command adds an Agree button and starts a new period; previous agreement records remain in the bot's guidelines database. Each button records the member and agreement date for that period. Earlier buttons stop accepting agreements when a new period starts.
+After posting the approved guidelines in a message sent by the bot, an officer with Manage Server can run `/guidelines-renew` with the semester, document version, and ID of the Agree message in `#team-guidelines`. The command adds an Agree button and starts a new period; previous agreement records remain in the bot's guidelines database. Each button records the member and agreement date for that period. Earlier buttons stop accepting agreements when a new period starts.
 
 The IUI pending role IDs are configured by default. To override them, set `GUIDELINES_PENDING_CRIMSON`, `GUIDELINES_PENDING_WHITE`, and `GUIDELINES_PENDING_BLACK` together to distinct existing role IDs. Pending roles must have no server permissions, be manageable by the bot, and be allowed to see the shared Teams category and its channels. They must not be able to view private team channels. The bot also needs permission to manage each team role.
 
