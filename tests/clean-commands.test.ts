@@ -37,7 +37,13 @@ for (const scope of ["guild", "global"]) {
           : Routes.applicationCommands(applicationId),
         { signal: expect.any(AbortSignal) },
       );
-      expect(remove).toHaveBeenCalledTimes(1);
+      expect(remove).toHaveBeenCalledTimes(2);
+      expect(remove).toHaveBeenCalledWith(
+        scope === "guild"
+          ? Routes.applicationGuildCommand(applicationId, guildId, "100000000000000005")
+          : Routes.applicationCommand(applicationId, "100000000000000005"),
+        { signal: expect.any(AbortSignal) },
+      );
       expect(remove).toHaveBeenCalledWith(
         scope === "guild"
           ? Routes.applicationGuildCommand(applicationId, guildId, staleId)

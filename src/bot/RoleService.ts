@@ -33,7 +33,7 @@ export class RoleService {
       return yield* Effect.fail(
         new ConfigurationError({
           message:
-            "The selected role was deleted. Select another role in Integrations > /autorole-target.",
+            "The selected role was deleted. Select another role in Integrations > /autorole.",
         }),
       );
     const problem = yield* roleAssignability(guild, role);
@@ -51,12 +51,12 @@ export class RoleService {
     guild: Guild,
   ) {
     if (this.guildId && this.guildId !== guild.id) return null;
-    const result = yield* commandPermissions(guild, "autorole-target", !!this.guildId);
+    const result = yield* commandPermissions(guild, "autorole", !!this.guildId);
     if (result.status === "not-ready")
       return yield* new ConfigurationError({ message: "Discord application is not ready." });
     if (result.status === "missing")
       return yield* new ConfigurationError({
-        message: "Run bun run register to register /autorole-target.",
+        message: "Run bun run register to register /autorole.",
       });
     const roleIds = new Set(
       result.permissions
@@ -71,7 +71,7 @@ export class RoleService {
     if (roleIds.size > 1)
       return yield* new ConfigurationError({
         message:
-          "Allow exactly one role on /autorole-target in Server Settings > Integrations. Multiple allowed roles disable assignment.",
+          "Allow exactly one role on /autorole in Server Settings > Integrations. Multiple allowed roles disable assignment.",
       });
     return roleIds.values().next().value ?? null;
   });

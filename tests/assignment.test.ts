@@ -77,9 +77,7 @@ class DiscordFixture {
     ) {
       return [
         {
-          ...commandDefinitions
-            .find((definition) => definition.name === "autorole-target")
-            ?.toJSON(),
+          ...commandDefinitions.find((definition) => definition.name === "autorole")?.toJSON(),
           id: ids.command,
           application_id: ids.app,
           version: ids.command,
@@ -282,15 +280,14 @@ test("command definitions serialize without constructing runtime dependencies", 
     "sync-roster",
     "preban",
     "autorole",
-    "autorole-target",
     "member-counter",
     "guidelines-renew",
     "guidelines-status",
   ]);
   expect(
-    commandDefinitions.find((definition) => definition.name === "autorole-target")?.toJSON(),
+    commandDefinitions.find((definition) => definition.name === "autorole")?.toJSON(),
   ).toMatchObject({
-    name: "autorole-target",
+    name: "autorole",
     default_member_permissions: "0",
   });
 });
@@ -726,7 +723,8 @@ test("autorole command catalog dispatches target and permission-denied status", 
   let statusReply = "";
   let deferred: unknown;
   const target = {
-    commandName: "autorole-target",
+    commandName: "autorole",
+    options: { getSubcommand: () => "target", getSubcommandGroup: () => null },
     reply: async (response: unknown) => {
       targetReply = response;
     },

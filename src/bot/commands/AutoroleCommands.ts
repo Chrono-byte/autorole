@@ -21,26 +21,20 @@ import { syncRoster } from "./syncRoster";
 import { guidelinesDefinition, guidelinesStatusDefinition } from "../guidelines/GuidelinesCommand";
 import { serverStatsDefinition } from "./ServerStatsCommand";
 
-const statusDefinition = new SlashCommandBuilder()
+const autoroleDefinition = new SlashCommandBuilder()
   .setName("autorole")
-  .setDescription("Show automatic role settings and setup instructions")
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild | PermissionFlagsBits.ManageRoles)
+  .setDescription("Manage automatic role assignment")
+  .setDefaultMemberPermissions(0n)
   .setContexts(InteractionContextType.Guild)
   .setIntegrationTypes(ApplicationIntegrationType.GuildInstall)
   .addSubcommand((command) =>
     command
       .setName("status")
       .setDescription("Check the role selected in Integrations and bot permissions"),
-  );
-
-const targetDefinition = new SlashCommandBuilder()
-  .setName("autorole-target")
-  .setDescription(
-    "Select the autorole via this command's allowed role in Server Settings > Integrations",
   )
-  .setDefaultMemberPermissions(0n)
-  .setContexts(InteractionContextType.Guild)
-  .setIntegrationTypes(ApplicationIntegrationType.GuildInstall);
+  .addSubcommand((command) =>
+    command.setName("target").setDescription("Show how to select the automatic role"),
+  );
 
 const prebanDefinition = new SlashCommandBuilder()
   .setName("preban")
@@ -84,8 +78,16 @@ const catalog = new CommandCatalog<RoleService>([
     run: (_, interaction) => preban(interaction),
   },
   {
-    definition: statusDefinition,
+    definition: autoroleDefinition,
     run: subcommands<RoleService>([
+      {
+        name: "target",
+        run: (_, interaction) =>
+          replyEphemeral(
+            interaction,
+            "Select exactly one allowed role in Server Settings > Integrations > this bot > /autorole. Save the command-specific permissions. Running this command does not assign or change roles.",
+          ),
+      },
       {
         name: "status",
         permissions: {
@@ -96,14 +98,6 @@ const catalog = new CommandCatalog<RoleService>([
         run: (roles, interaction) => status(roles, interaction),
       },
     ]),
-  },
-  {
-    definition: targetDefinition,
-    run: (_, interaction) =>
-      replyEphemeral(
-        interaction,
-        "This command marks the autorole configuration. A server administrator selects exactly one allowed role in Server Settings > Integrations > this bot > /autorole-target. Running this command does not assign or change any roles.",
-      ),
   },
 ]);
 
@@ -137,9 +131,9 @@ const status = Effect.fn("AutoroleCommands.status")(function* (
       content = result.failure.message || "Unable to read Discord integration settings.";
     } else if (result.success === null) {
       content =
-        "Autorole is disabled. In Server Settings > Integrations > this bot > /autorole-target, add exactly one role and enable its checkmark. Save the command-specific permissions.";
+        "Autorole is disabled. In Server Settings > Integrations > this bot > /autorole, add exactly one role and enable its checkmark. Save the command-specific permissions.";
     } else {
-      content = `Autorole: <@&${result.success.id}>. Bot permissions and hierarchy are valid. New human members receive this role after membership screening. To disable, remove or deny its entry on /autorole-target in Integrations.`;
+      content = `Autorole: <@&${result.success.id}>. Bot permissions and hierarchy are valid. New human members receive this role after membership screening. To disable, remove or deny its entry on /autorole in Integrations.`;
     }
   }
   yield* editResponse(interaction, content);
