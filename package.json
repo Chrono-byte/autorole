@@ -23,7 +23,8 @@
     "build:binary": "bun build --compile --minify --keep-names --target=bun-linux-x64-baseline --env=disable --no-compile-autoload-dotenv --no-compile-autoload-bunfig src/index.ts --outfile dist/autorole",
     "deploy": "sh scripts/deploy.sh",
     "deploy:artifact": "bash scripts/deploy-artifact.sh",
-    "setup:suggestions": "bun run src/cli/setup-suggestions.ts"
+    "setup:suggestions": "bun run src/cli/setup-suggestions.ts",
+    "setup:guidelines": "bun run src/cli/setup-guidelines.ts"
   },
   "dependencies": {
     "@autorole/discord-framework": "workspace:*",

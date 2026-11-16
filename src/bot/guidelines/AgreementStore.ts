@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Semaphore } from "effect";
 import { asError } from "../../effectful";
 import { StorageError } from "../../errors";
 
@@ -22,6 +22,10 @@ const operation = <A>(name: string, run: () => A) =>
   });
 
 export class AgreementStore {
+  readonly accessLock = Semaphore.makeUnsafe(1);
+
+  readonly renewalLock = Semaphore.makeUnsafe(1);
+
   private constructor(private readonly db: Database) {}
 
   static make = Effect.fn("AgreementStore.make")(function* (path: string) {
@@ -73,25 +77,27 @@ export class AgreementStore {
     version: string;
     startedAt: number;
   }) {
-    return operation("startAgreementPeriod", () =>
-      this.db.transaction(() => {
-        this.db.run(
-          "INSERT INTO guideline_periods (id, guildId, channelId, messageId, period, version, startedAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          [
-            input.id,
-            input.guildId,
-            input.channelId,
-            input.messageId,
-            input.period,
-            input.version,
-            input.startedAt,
-          ],
-        );
-        this.db.run(
-          "INSERT INTO guideline_active_period (guildId, periodId) VALUES (?, ?) ON CONFLICT(guildId) DO UPDATE SET periodId = excluded.periodId",
-          [input.guildId, input.id],
-        );
-      })(),
+    return this.accessLock.withPermit(
+      operation("startAgreementPeriod", () =>
+        this.db.transaction(() => {
+          this.db.run(
+            "INSERT INTO guideline_periods (id, guildId, channelId, messageId, period, version, startedAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+              input.id,
+              input.guildId,
+              input.channelId,
+              input.messageId,
+              input.period,
+              input.version,
+              input.startedAt,
+            ],
+          );
+          this.db.run(
+            "INSERT INTO guideline_active_period (guildId, periodId) VALUES (?, ?) ON CONFLICT(guildId) DO UPDATE SET periodId = excluded.periodId",
+            [input.guildId, input.id],
+          );
+        })(),
+      ),
     );
   }
 

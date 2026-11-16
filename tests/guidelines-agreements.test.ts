@@ -77,17 +77,18 @@ test("renewal preserves prior agreements and rejects stale buttons", async () =>
   );
 });
 
-test("team role swaps preserve assignments and report bypassing overwrites", async () => {
+test("channel access roles preserve team membership and follow the current agreement", async () => {
   const { ChannelType, Collection, PermissionFlagsBits, PermissionsBitField } =
     await import("discord.js");
   const { reconcileTeamGate } = await import("../src/bot/guidelines/TeamGate");
   const { rosterGuildId } = await import("../src/bot/commands/syncRoster");
   const mapping = [
-    { category: "category", identity: ["team", "pending"], team: "team", pending: "pending" },
+    { category: "category", identity: ["team", "sub"], accessName: "Access", access: "access" },
   ];
-  const assigned = new Set(["team", "captain"]);
+  const assigned = new Set(["team", "captain", "access"]);
   const member = {
     id: "member",
+    user: { bot: false },
     permissions: new PermissionsBitField(0n),
     roles: {
       get cache() {
@@ -102,7 +103,7 @@ test("team role swaps preserve assignments and report bypassing overwrites", asy
     },
   };
   const roles = new Collection(
-    ["team", "pending", "captain"].map((id) => [
+    ["team", "sub", "access", "captain"].map((id) => [
       id,
       { id, managed: false, permissions: new PermissionsBitField(0n) },
     ]),
@@ -118,18 +119,9 @@ test("team role swaps preserve assignments and report bypassing overwrites", asy
       },
     ],
     [
-      "team",
+      "access",
       {
-        id: "team",
-        type: 0,
-        deny: new PermissionsBitField(0n),
-        allow: new PermissionsBitField(PermissionFlagsBits.ViewChannel),
-      },
-    ],
-    [
-      "captain",
-      {
-        id: "captain",
+        id: "access",
         type: 0,
         deny: new PermissionsBitField(0n),
         allow: new PermissionsBitField(PermissionFlagsBits.ViewChannel),
@@ -144,10 +136,13 @@ test("team role swaps preserve assignments and report bypassing overwrites", asy
     permissionsFor: () => new PermissionsBitField(0n),
   };
   const shared = {
-    id: "1565003638852550768",
-    type: ChannelType.GuildCategory,
-    parentId: null,
-    permissionsFor: () => new PermissionsBitField(PermissionFlagsBits.ViewChannel),
+    id: "1566875132658458675",
+    type: ChannelType.GuildText,
+    parentId: "1565003638852550768",
+    permissionsFor: () =>
+      new PermissionsBitField(
+        PermissionFlagsBits.ViewChannel | PermissionFlagsBits.ReadMessageHistory,
+      ),
   };
   const guild = {
     id: rosterGuildId,
@@ -155,7 +150,7 @@ test("team role swaps preserve assignments and report bypassing overwrites", asy
     roles: { fetch: async () => roles },
     channels: {
       fetch: async () =>
-        new Collection([
+        new Collection<string, unknown>([
           ["category", category],
           [shared.id, shared],
         ]),
@@ -185,16 +180,31 @@ test("team role swaps preserve assignments and report bypassing overwrites", asy
         expect(yield* reconcileTeamGate(guild, store, mapping)).toEqual({
           changed: 1,
           failed: [],
-          conflicts: ["member"],
         });
-        expect([...assigned].toSorted()).toEqual(["captain", "pending"]);
+        expect([...assigned].toSorted()).toEqual(["captain", "team"]);
         yield* store.acceptCurrent(rosterGuildId, "period", "channel", "message", "member", 2);
         expect(yield* reconcileTeamGate(guild, store, mapping)).toEqual({
           changed: 1,
           failed: [],
-          conflicts: [],
         });
+        expect([...assigned].toSorted()).toEqual(["access", "captain", "team"]);
+        expect((yield* reconcileTeamGate(guild, store, mapping)).changed).toBe(0);
+        yield* store.startPeriod({
+          id: "renewed",
+          guildId: rosterGuildId,
+          channelId: "channel",
+          messageId: "message",
+          period: "Fall",
+          version: "2",
+          startedAt: 3,
+        });
+        expect((yield* reconcileTeamGate(guild, store, mapping)).changed).toBe(1);
         expect([...assigned].toSorted()).toEqual(["captain", "team"]);
+        yield* store.acceptCurrent(rosterGuildId, "renewed", "channel", "message", "member", 4);
+        expect((yield* reconcileTeamGate(guild, store, mapping)).changed).toBe(1);
+        assigned.delete("team");
+        expect((yield* reconcileTeamGate(guild, store, mapping)).changed).toBe(1);
+        expect([...assigned]).toEqual(["captain"]);
       }),
     ),
   );
@@ -221,4 +231,34 @@ test("disabling the gate retains agreement history", async () => {
       }),
     ),
   );
+});
+
+test("team access uses current membership and agreement, including substitutes and multiple teams", async () => {
+  const { desiredTeamAccess } = await import("../src/bot/guidelines/TeamGate");
+  const mapping = [
+    {
+      category: "red",
+      accessName: "Red Access",
+      identity: ["red-player", "red-sub"],
+      access: "red-access",
+    },
+    {
+      category: "white",
+      accessName: "White Access",
+      identity: ["white-player", "white-sub"],
+      access: "white-access",
+    },
+  ];
+  expect(desiredTeamAccess(new Set(["red-sub", "white-player"]), mapping, true)).toEqual([
+    { access: "red-access", allowed: true },
+    { access: "white-access", allowed: true },
+  ]);
+  expect(desiredTeamAccess(new Set(["red-player", "white-sub"]), mapping, false)).toEqual([
+    { access: "red-access", allowed: false },
+    { access: "white-access", allowed: false },
+  ]);
+  expect(desiredTeamAccess(new Set(["red-access", "white-access"]), mapping, true)).toEqual([
+    { access: "red-access", allowed: false },
+    { access: "white-access", allowed: false },
+  ]);
 });

@@ -8,7 +8,7 @@ import { RoleService } from "./RoleService";
 import { Suggestions } from "./suggestions/Suggestions";
 import { StatsStore } from "./member-counter/StatsStore";
 import { automaticRoster, automaticRosterMember, rosterChanged } from "./AutomaticRoster";
-import { rosterGuildId } from "./commands/syncRoster";
+import { automaticTeamGate, reconcileMemberAccess, teamDefinitions } from "./guidelines/TeamGate";
 import { AgreementStore } from "./guidelines/AgreementStore";
 import { guidelinesButton, isGuidelinesButton } from "./guidelines/GuidelinesCommand";
 
@@ -38,12 +38,12 @@ export const makeAutorole = Effect.fn("Autorole.make")(function* (
   const agreements = yield* AgreementStore.make(
     options.path === ":memory:" ? ":memory:" : `${options.path}.guidelines`,
   );
-  yield* agreements.deactivate(rosterGuildId);
   return {
     commands: commandCatalog.bind({ roles, stats, agreements }),
     background: [
       () => assignments.start(),
       automaticRoster,
+      (readyClient: Client<true>) => automaticTeamGate(readyClient, agreements),
       (readyClient: Client<true>) => serverMemberCounter(readyClient, stats),
     ],
     events: [
@@ -59,6 +59,12 @@ export const makeAutorole = Effect.fn("Autorole.make")(function* (
         Effect.gen(function* () {
           if (before.pending && !member.pending) yield* assignments.observe(member);
           if (rosterChanged(before, member)) yield* automaticRosterMember(member);
+          if (
+            teamDefinitions.some((team) =>
+              team.identity.some((id) => before.roles.cache.has(id) !== member.roles.cache.has(id)),
+            )
+          )
+            yield* reconcileMemberAccess(member, agreements);
         }),
       ),
       event(Events.GuildMemberAvailable, (member) => assignments.observe(member)),

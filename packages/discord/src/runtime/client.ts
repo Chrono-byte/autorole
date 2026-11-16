@@ -41,11 +41,11 @@ export const listen = Effect.fn("Discord.listen")(function* <K extends keyof Cli
 });
 
 /** Acquire a client, install its behavior, log in, and stay alive until stopped. */
-export const runClient = Effect.fn("Discord.runClient")(function* (
+export const runClient = Effect.fn("Discord.runClient")(function* <E = never>(
   options: ClientOptions,
   token: string,
   setup: (client: Client) => Effect.Effect<void, Error, import("effect").Scope.Scope>,
-  until: Effect.Effect<void> = Effect.never,
+  until: Effect.Effect<void, E> = Effect.never,
 ) {
   const client = yield* makeClient(options, (discordClient) =>
     discordRequest(() => discordClient.destroy()).pipe(Effect.ignore),
