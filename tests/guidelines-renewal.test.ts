@@ -140,7 +140,7 @@ test("renewal installs a button without rewriting approved text, and only the cu
         });
         expect(yield* store.getAcceptance("fall-v2", "member")).toBeNull();
         expect(yield* store.history(rosterGuildId, "member")).toEqual([
-          { period: "Fall 2026", version: "2026-11-16", agreedAt: 2000 },
+          { period: "Fall 2026", version: "2026-11-16", agreedAt: 2000, source: "member" },
         ]);
       }),
     ),

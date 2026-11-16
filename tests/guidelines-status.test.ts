@@ -133,3 +133,28 @@ test("long agreement histories retain more than 25 records and use a private att
     ],
   });
 });
+
+test("administrative access grants are labeled separately from personal agreements", async () => {
+  const { interaction, replies } = interactionFixture();
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* AgreementStore.make(":memory:");
+        yield* store.startPeriod({
+          id: "fall",
+          guildId: "guild",
+          channelId: "channel",
+          messageId: "message",
+          period: "Fall 2026",
+          version: "2026-11-16",
+          startedAt: 1000,
+        });
+        yield* store.grantCurrent("guild", "fall", ["member"], 2000);
+        yield* guidelinesCommands.bind(store).dispatch(interaction);
+      }),
+    ),
+  );
+  expect(replies[1]).toBe(
+    "Agreement history for member:\nFall 2026 (version 2026-11-16): Access granted administratively <t:2:f>.\n\nFall 2026 (version 2026-11-16): Administrative access grant <t:2:f>",
+  );
+});

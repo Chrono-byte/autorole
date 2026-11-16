@@ -262,3 +262,79 @@ test("team access uses current membership and agreement, including substitutes a
     { access: "white-access", allowed: false },
   ]);
 });
+
+test("administrative grants preserve personal agreements, are scoped to one period, and become personal only on a click", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* AgreementStore.make(":memory:");
+        const period = {
+          id: "current",
+          guildId: "guild",
+          channelId: "channel",
+          messageId: "message",
+          period: "Fall 2026",
+          version: "2026-11-16",
+          startedAt: 10,
+        };
+        yield* store.startPeriod(period);
+        yield* store.acceptCurrent("guild", "current", "channel", "message", "already-agreed", 20);
+        expect(
+          yield* store.grantCurrent("guild", "current", ["already-agreed", "grandfathered"], 30),
+        ).toBe(1);
+        expect(yield* store.getAcceptance("current", "already-agreed")).toMatchObject({
+          agreedAt: 20,
+          source: "member",
+        });
+        expect(yield* store.getAcceptance("current", "grandfathered")).toMatchObject({
+          agreedAt: 30,
+          source: "admin",
+        });
+        expect(yield* store.getAcceptance("current", "later-joiner")).toBeNull();
+        expect(yield* store.grantCurrent("guild", "current", ["grandfathered"], 40)).toBe(0);
+        expect((yield* store.getAcceptance("current", "grandfathered"))?.agreedAt).toBe(30);
+        yield* store.acceptCurrent("guild", "current", "channel", "message", "grandfathered", 50);
+        expect(yield* store.getAcceptance("current", "grandfathered")).toMatchObject({
+          agreedAt: 50,
+          source: "member",
+        });
+        yield* store.acceptCurrent("guild", "current", "channel", "message", "grandfathered", 60);
+        expect((yield* store.getAcceptance("current", "grandfathered"))?.agreedAt).toBe(50);
+        yield* store.startPeriod({ ...period, id: "next", version: "next" });
+        expect(yield* store.grantCurrent("guild", "current", ["late"], 70)).toBe(0);
+        expect(yield* store.getAcceptance("next", "grandfathered")).toBeNull();
+      }),
+    ),
+  );
+});
+
+test("source migration preserves existing personal agreement dates across reopen", async () => {
+  const { Database } = await import("bun:sqlite");
+  const directory = mkdtempSync(join(tmpdir(), "agreement-source-"));
+  const path = join(directory, "agreements.sqlite");
+  const legacy = new Database(path);
+  legacy.run(
+    "CREATE TABLE guideline_period_acceptances (periodId TEXT NOT NULL, memberId TEXT NOT NULL, agreedAt INTEGER NOT NULL, PRIMARY KEY(periodId, memberId))",
+  );
+  legacy.run("INSERT INTO guideline_period_acceptances VALUES ('period', 'member', 1234)");
+  legacy.close();
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const store = yield* AgreementStore.make(path);
+            expect(yield* store.getAcceptance("period", "member")).toEqual({
+              periodId: "period",
+              memberId: "member",
+              agreedAt: 1234,
+              source: "member",
+            });
+          }),
+        ),
+      );
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

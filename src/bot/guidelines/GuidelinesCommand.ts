@@ -109,11 +109,12 @@ export const guidelinesCommands = new CommandCatalog<AgreementStore>([
         if (member) {
           const history = yield* store.history(guild.id, member.id);
           const lines = history.map(
-            (h) => `${h.period} (version ${h.version}): <t:${Math.floor(h.agreedAt / 1000)}:f>`,
+            (h) =>
+              `${h.period} (version ${h.version}): ${h.source === "admin" ? "Administrative access grant " : ""}<t:${Math.floor(h.agreedAt / 1000)}:f>`,
           );
           const acceptance = active ? yield* store.getAcceptance(active.id, member.id) : null;
           const current = active
-            ? `${active.period} (version ${active.version}): ${acceptance ? `Agreed <t:${Math.floor(acceptance.agreedAt / 1000)}:f>` : "Not yet agreed"}.`
+            ? `${active.period} (version ${active.version}): ${acceptance ? `${acceptance.source === "admin" ? "Access granted administratively" : "Agreed"} <t:${Math.floor(acceptance.agreedAt / 1000)}:f>` : "Not yet agreed"}.`
             : "No active agreement period.";
           const report = `Agreement history for ${member.id}:\n${current}\n\n${lines.join("\n") || "No recorded agreements."}`;
           return yield* editResponse(
@@ -137,6 +138,7 @@ export const guidelinesCommands = new CommandCatalog<AgreementStore>([
           );
         const missing: string[] = [];
         const agreed: string[] = [];
+        const granted: string[] = [];
         const incomplete = new Error("Could not read all members; status is incomplete.");
         const scanned = yield* Effect.result(
           forEachGuildMember(
@@ -149,9 +151,10 @@ export const guidelinesCommands = new CommandCatalog<AgreementStore>([
                 )
                   return;
                 const acceptance = yield* store.getAcceptance(active.id, entry.id);
-                if (acceptance)
-                  agreed.push(`${entry.id}: ${new Date(acceptance.agreedAt).toISOString()}`);
-                else missing.push(entry.id);
+                if (acceptance) {
+                  const records = acceptance.source === "admin" ? granted : agreed;
+                  records.push(`${entry.id}: ${new Date(acceptance.agreedAt).toISOString()}`);
+                } else missing.push(entry.id);
               }),
             incomplete,
           ),
@@ -161,8 +164,8 @@ export const guidelinesCommands = new CommandCatalog<AgreementStore>([
             return yield* editResponse(interaction, incomplete.message);
           return yield* Effect.fail(scanned.failure);
         }
-        const summary = `${active.period} (version ${active.version}): ${agreed.length} agreed, ${missing.length} outstanding among current team members.`;
-        const report = `${summary}\n\nAgreed (member ID and date in UTC):\n${agreed.join("\n") || "None."}\n\nOutstanding (member IDs):\n${missing.join("\n") || "None."}`;
+        const summary = `${active.period} (version ${active.version}): ${agreed.length} agreed, ${granted.length} granted administratively, ${missing.length} outstanding among current team members.`;
+        const report = `${summary}\n\nAgreed (member ID and date in UTC):\n${agreed.join("\n") || "None."}\n\nAdministrative access grants (member ID and date in UTC):\n${granted.join("\n") || "None."}\n\nOutstanding (member IDs):\n${missing.join("\n") || "None."}`;
         return yield* editResponse(interaction, {
           content: summary,
           files: [new AttachmentBuilder(Buffer.from(report), { name: "agreement-status.txt" })],

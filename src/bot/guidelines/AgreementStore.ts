@@ -55,6 +55,17 @@ export class AgreementStore {
       db.run(
         "CREATE TABLE IF NOT EXISTS guideline_period_acceptances (periodId TEXT NOT NULL, memberId TEXT NOT NULL, agreedAt INTEGER NOT NULL, PRIMARY KEY(periodId, memberId), FOREIGN KEY(periodId) REFERENCES guideline_periods(id))",
       );
+      if (
+        !db
+          .query(
+            "SELECT name FROM pragma_table_info('guideline_period_acceptances') WHERE name = 'source'",
+          )
+          .get()
+      ) {
+        db.run(
+          "ALTER TABLE guideline_period_acceptances ADD COLUMN source TEXT NOT NULL DEFAULT 'member' CHECK(source IN ('member', 'admin'))",
+        );
+      }
       db.run(
         "CREATE TABLE IF NOT EXISTS guideline_active_period (guildId TEXT PRIMARY KEY, periodId TEXT NOT NULL, FOREIGN KEY(periodId) REFERENCES guideline_periods(id))",
       );
@@ -135,11 +146,28 @@ export class AgreementStore {
   ) {
     return operation("acceptAgreementPeriod", () => {
       const result = this.db.run(
-        "INSERT INTO guideline_period_acceptances (periodId, memberId, agreedAt) SELECT p.id, ?, ? FROM guideline_periods p JOIN guideline_active_period a ON a.periodId = p.id WHERE p.id = ? AND p.guildId = ? AND p.channelId = ? AND p.messageId = ? ON CONFLICT(periodId, memberId) DO NOTHING",
+        "INSERT INTO guideline_period_acceptances (periodId, memberId, agreedAt) SELECT p.id, ?, ? FROM guideline_periods p JOIN guideline_active_period a ON a.periodId = p.id WHERE p.id = ? AND p.guildId = ? AND p.channelId = ? AND p.messageId = ? ON CONFLICT(periodId, memberId) DO UPDATE SET agreedAt = excluded.agreedAt, source = 'member' WHERE guideline_period_acceptances.source = 'admin'",
         [memberId, agreedAt, periodId, guildId, channelId, messageId],
       );
       return result.changes > 0;
     });
+  }
+
+  grantCurrent(guildId: string, periodId: string, memberIds: readonly string[], grantedAt: number) {
+    return this.accessLock.withPermit(
+      operation("grantAgreementAccess", () =>
+        this.db.transaction(() => {
+          let changes = 0;
+          for (const memberId of memberIds) {
+            changes += this.db.run(
+              "INSERT INTO guideline_period_acceptances (periodId, memberId, agreedAt, source) SELECT p.id, ?, ?, 'admin' FROM guideline_periods p JOIN guideline_active_period a ON a.periodId = p.id WHERE p.id = ? AND p.guildId = ? ON CONFLICT(periodId, memberId) DO NOTHING",
+              [memberId, grantedAt, periodId, guildId],
+            ).changes;
+          }
+          return changes;
+        })(),
+      ),
+    );
   }
 
   getAcceptance(periodId: string, memberId: string) {
@@ -150,12 +178,13 @@ export class AgreementStore {
             periodId: Schema.String,
             memberId: Schema.String,
             agreedAt: Schema.Number,
+            source: Schema.Literals(["member", "admin"]),
           }),
         ),
       )(
         this.db
           .query(
-            "SELECT periodId, memberId, agreedAt FROM guideline_period_acceptances WHERE periodId = ? AND memberId = ?",
+            "SELECT periodId, memberId, agreedAt, source FROM guideline_period_acceptances WHERE periodId = ? AND memberId = ?",
           )
           .get(periodId, memberId),
       ),
@@ -166,12 +195,17 @@ export class AgreementStore {
     return operation("agreementHistory", () =>
       Schema.decodeUnknownSync(
         Schema.Array(
-          Schema.Struct({ period: Schema.String, version: Schema.String, agreedAt: Schema.Number }),
+          Schema.Struct({
+            period: Schema.String,
+            version: Schema.String,
+            agreedAt: Schema.Number,
+            source: Schema.Literals(["member", "admin"]),
+          }),
         ),
       )(
         this.db
           .query(
-            "SELECT p.period, p.version, a.agreedAt FROM guideline_period_acceptances a JOIN guideline_periods p ON p.id = a.periodId WHERE p.guildId = ? AND a.memberId = ? ORDER BY a.agreedAt DESC",
+            "SELECT p.period, p.version, a.agreedAt, a.source FROM guideline_period_acceptances a JOIN guideline_periods p ON p.id = a.periodId WHERE p.guildId = ? AND a.memberId = ? ORDER BY a.agreedAt DESC",
           )
           .all(guildId, memberId),
       ),
