@@ -31,9 +31,6 @@ const autoroleDefinition = new SlashCommandBuilder()
     command
       .setName("status")
       .setDescription("Check the role selected in Integrations and bot permissions"),
-  )
-  .addSubcommand((command) =>
-    command.setName("target").setDescription("Show how to select the automatic role"),
   );
 
 const prebanDefinition = new SlashCommandBuilder()
@@ -80,14 +77,6 @@ const catalog = new CommandCatalog<RoleService>([
   {
     definition: autoroleDefinition,
     run: subcommands<RoleService>([
-      {
-        name: "target",
-        run: (_, interaction) =>
-          replyEphemeral(
-            interaction,
-            "Select exactly one allowed role in Server Settings > Integrations > this bot > /autorole. Save the command-specific permissions. Running this command does not assign or change roles.",
-          ),
-      },
       {
         name: "status",
         permissions: {

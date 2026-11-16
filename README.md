@@ -30,7 +30,7 @@ When upgrading from `/autorole-target`, register the updated commands, select th
 
 To change roles, remove the old selection and allow the new one. To disable assignment, remove or deny all role selections. Changes apply without restarting.
 
-Use the command's own permissions; app-wide permissions do not select a role. Running `/autorole target` only shows instructions. Bots are skipped, and existing members or joins while the bot is offline are not backfilled. Observed joins awaiting screening or assignment are stored in SQLite and retried after restarts. Set `AUTOROLE_STATE_PATH` to choose the database path (default `./data/assignments.sqlite`).
+Use the command's own permissions; app-wide permissions do not select a role. Bots are skipped, and existing members or joins while the bot is offline are not backfilled. Observed joins awaiting screening or assignment are stored in SQLite and retried after restarts. Set `AUTOROLE_STATE_PATH` to choose the database path (default `./data/assignments.sqlite`).
 
 Pending screening, disabled autorole, and configuration or permission failures are rechecked every five minutes. Transient Discord failures use exponential backoff from one minute to one hour. Outstanding assignments remain in SQLite until completed or the member leaves. Logs retain systemd journal priorities and include Effect fiber and trace identifiers.
 

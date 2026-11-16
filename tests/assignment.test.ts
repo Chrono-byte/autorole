@@ -716,19 +716,11 @@ test("autorole module handles a join and removes its listeners on scope exit", a
   });
 });
 
-test("autorole command catalog dispatches target and permission-denied status", async () => {
+test("autorole command catalog dispatches permission-denied status", async () => {
   const { MessageFlags } = await import("discord.js");
   const registry = makeCommandRegistry(new RoleService());
-  let targetReply: unknown;
   let statusReply = "";
   let deferred: unknown;
-  const target = {
-    commandName: "autorole",
-    options: { getSubcommand: () => "target", getSubcommandGroup: () => null },
-    reply: async (response: unknown) => {
-      targetReply = response;
-    },
-  } as unknown as import("discord.js").ChatInputCommandInteraction;
   const status = {
     commandName: "autorole",
     guild: null,
@@ -744,12 +736,7 @@ test("autorole command catalog dispatches target and permission-denied status", 
       statusReply = content;
     },
   } as unknown as import("discord.js").ChatInputCommandInteraction;
-  await Effect.runPromise(registry.dispatch(target));
   await Effect.runPromise(registry.dispatch(status));
-  expect(targetReply).toMatchObject({
-    flags: MessageFlags.Ephemeral,
-    content: expect.stringContaining("Server Settings > Integrations"),
-  });
   expect(deferred).toEqual({ flags: MessageFlags.Ephemeral });
   expect(statusReply).toBe("You need Manage Server and Manage Roles to inspect autorole settings.");
 });
