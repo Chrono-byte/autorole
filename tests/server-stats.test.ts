@@ -8,9 +8,9 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { Effect, Result } from "effect";
-import { refreshServerStats } from "../src/bot/ServerStats";
-import { serverStatsCommands } from "../src/bot/commands/ServerStatsCommand";
-import { StatsStore } from "../src/bot/StatsStore";
+import { refreshServerStats } from "../src/bot/member-counter/ServerStats";
+import { serverStatsCommands } from "../src/bot/member-counter/ServerStatsCommand";
+import { StatsStore } from "../src/bot/member-counter/StatsStore";
 
 test("setting the counter channel immediately updates its name before confirming", async () => {
   const actions: string[] = [];
@@ -46,7 +46,7 @@ test("setting the counter channel immediately updates its name before confirming
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* StatsStore.make(":memory:");
-        yield* serverStatsCommands(store).dispatch(interaction);
+        yield* serverStatsCommands.bind(store).dispatch(interaction);
         expect(yield* store.list()).toEqual([{ guildId: "guild", channelId: "counter" }]);
       }),
     ),
@@ -118,7 +118,7 @@ test("counter command requires Manage Server at execution time", async () => {
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* StatsStore.make(":memory:");
-        const registry = serverStatsCommands(store);
+        const registry = serverStatsCommands.bind(store);
         const interaction = {
           commandName: "member-counter",
           guildId: "1415400507006124093",
@@ -132,7 +132,7 @@ test("counter command requires Manage Server at execution time", async () => {
         const result = yield* Effect.result(registry.dispatch(interaction));
         expect(Result.isFailure(result)).toBe(true);
         expect(yield* store.list()).toEqual([]);
-        expect(serverStatsCommands(store).definitions[0]?.toJSON()).toMatchObject({
+        expect(serverStatsCommands.bind(store).definitions[0]?.toJSON()).toMatchObject({
           default_member_permissions: PermissionFlagsBits.ManageGuild.toString(),
         });
       }),

@@ -1,15 +1,16 @@
 import {
   ApplicationIntegrationType,
+  AttachmentBuilder,
   InteractionContextType,
   PermissionFlagsBits,
   SlashCommandBuilder,
   type ButtonInteraction,
 } from "discord.js";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import {
-  CommandRegistry,
+  CommandCatalog,
   deferEphemeral,
-  discordRequest,
+  forEachGuildMember,
   editResponse,
   replyEphemeral,
 } from "@autorole/discord-framework";
@@ -18,7 +19,7 @@ import { rosterGuildId } from "../commands/syncRoster";
 import { AgreementStore } from "./AgreementStore";
 
 const prefix = "guidelines:agree:";
-export const guidelinesDefinition = new SlashCommandBuilder()
+const guidelinesDefinition = new SlashCommandBuilder()
   .setName("guidelines-renew")
   .setDescription("Start a new guidelines agreement period")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
@@ -45,7 +46,7 @@ export const guidelinesDefinition = new SlashCommandBuilder()
       .setRequired(true),
   );
 
-export const guidelinesStatusDefinition = new SlashCommandBuilder()
+const guidelinesStatusDefinition = new SlashCommandBuilder()
   .setName("guidelines-status")
   .setDescription("Check outstanding agreements or a member's history")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
@@ -53,70 +54,90 @@ export const guidelinesStatusDefinition = new SlashCommandBuilder()
   .setIntegrationTypes(ApplicationIntegrationType.GuildInstall)
   .addUserOption((o) => o.setName("member").setDescription("Show this member's agreement history"));
 
-export function guidelinesCommands(store: AgreementStore) {
-  return new CommandRegistry([
-    {
-      definition: guidelinesStatusDefinition,
-      permissions: { guildOnly: true, member: PermissionFlagsBits.ManageGuild },
-      run: (interaction) =>
-        Effect.gen(function* () {
-          const guild = interaction.guild;
-          const mapping = teamRolesFromEnv();
-          if (!guild || guild.id !== rosterGuildId || !mapping)
-            return yield* replyEphemeral(
-              interaction,
-              "The team gate is not configured for this server.",
-            );
-          yield* deferEphemeral(interaction);
-          const member = interaction.options.getUser("member");
-          if (member) {
-            const history = yield* store.history(guild.id, member.id);
-            const lines = history.map(
-              (h) => `${h.period} (version ${h.version}): <t:${Math.floor(h.agreedAt / 1000)}:f>`,
-            );
-            return yield* editResponse(
-              interaction,
-              `Agreement history for ${member.id}:\n${lines.join("\n").slice(0, 1500) || "No recorded agreements."}`,
-            );
-          }
-          const active = yield* store.active(guild.id);
-          if (!active) return yield* editResponse(interaction, "No active agreement period.");
-          const missing: string[] = [];
-          let after: string | undefined;
-          for (;;) {
-            const page = yield* discordRequest(() =>
-              guild.members.list({ limit: 1000, after, cache: false }),
-            );
-            for (const entry of page.values()) {
-              if (
-                !entry.user.bot &&
-                mapping.some((x) => x.identity.some((id) => entry.roles.cache.has(id))) &&
-                !(yield* store.getAcceptance(active.id, entry.id))
-              )
-                missing.push(entry.id);
-            }
-            if (page.size < 1000) break;
-            const last = page.last();
-            if (!last || last.id === after)
-              return yield* editResponse(
-                interaction,
-                "Could not read all members; status is incomplete.",
-              );
-            after = last.id;
-          }
+export const guidelinesCommands = new CommandCatalog<AgreementStore>([
+  {
+    definition: guidelinesDefinition,
+    permissions: { guildOnly: true, member: PermissionFlagsBits.ManageGuild },
+    run: (_, interaction) => replyEphemeral(interaction, "Agreement renewal is disabled."),
+  },
+  {
+    definition: guidelinesStatusDefinition,
+    permissions: { guildOnly: true, member: PermissionFlagsBits.ManageGuild },
+    run: (store, interaction) =>
+      Effect.gen(function* () {
+        const guild = interaction.guild;
+        if (!guild)
+          return yield* replyEphemeral(
+            interaction,
+            "Agreement records are only available in a server.",
+          );
+        yield* deferEphemeral(interaction);
+        const active = yield* store.active(guild.id);
+        const member = interaction.options.getUser("member");
+        if (member) {
+          const history = yield* store.history(guild.id, member.id);
+          const lines = history.map(
+            (h) => `${h.period} (version ${h.version}): <t:${Math.floor(h.agreedAt / 1000)}:f>`,
+          );
+          const acceptance = active ? yield* store.getAcceptance(active.id, member.id) : null;
+          const current = active
+            ? `${active.period} (version ${active.version}): ${acceptance ? `Agreed <t:${Math.floor(acceptance.agreedAt / 1000)}:f>` : "Not yet agreed"}.`
+            : "No active agreement period.";
+          const report = `Agreement history for ${member.id}:\n${current}\n\n${lines.join("\n") || "No recorded agreements."}`;
           return yield* editResponse(
             interaction,
-            `${active.period}: ${missing.length} eligible members have not agreed.\n${missing.join("\n").slice(0, 1500) || "None."}`,
+            report.length <= 2000
+              ? report
+              : {
+                  content: `Agreement history for ${member.id}:\n${current}\nFull history attached.`,
+                  files: [
+                    new AttachmentBuilder(Buffer.from(report), { name: "agreement-history.txt" }),
+                  ],
+                },
           );
-        }),
-    },
-    {
-      definition: guidelinesDefinition,
-      permissions: { guildOnly: true, member: PermissionFlagsBits.ManageGuild },
-      run: (interaction) => replyEphemeral(interaction, "Agreement renewal is disabled."),
-    },
-  ]);
-}
+        }
+        if (!active) return yield* editResponse(interaction, "No active agreement period.");
+        const mapping = guild.id === rosterGuildId ? teamRolesFromEnv() : null;
+        if (!mapping)
+          return yield* editResponse(
+            interaction,
+            "Team roles are not configured. Select a member to inspect their agreement history.",
+          );
+        const missing: string[] = [];
+        const agreed: string[] = [];
+        const incomplete = new Error("Could not read all members; status is incomplete.");
+        const scanned = yield* Effect.result(
+          forEachGuildMember(
+            guild,
+            (entry) =>
+              Effect.gen(function* () {
+                if (
+                  entry.user.bot ||
+                  !mapping.some((x) => x.identity.some((id) => entry.roles.cache.has(id)))
+                )
+                  return;
+                const acceptance = yield* store.getAcceptance(active.id, entry.id);
+                if (acceptance)
+                  agreed.push(`${entry.id}: ${new Date(acceptance.agreedAt).toISOString()}`);
+                else missing.push(entry.id);
+              }),
+            incomplete,
+          ),
+        );
+        if (Result.isFailure(scanned)) {
+          if (scanned.failure === incomplete)
+            return yield* editResponse(interaction, incomplete.message);
+          return yield* Effect.fail(scanned.failure);
+        }
+        const summary = `${active.period} (version ${active.version}): ${agreed.length} agreed, ${missing.length} outstanding among current team members.`;
+        const report = `${summary}\n\nAgreed (member ID and date in UTC):\n${agreed.join("\n") || "None."}\n\nOutstanding (member IDs):\n${missing.join("\n") || "None."}`;
+        return yield* editResponse(interaction, {
+          content: summary,
+          files: [new AttachmentBuilder(Buffer.from(report), { name: "agreement-status.txt" })],
+        });
+      }),
+  },
+]);
 
 export function guidelinesButton(store: AgreementStore, interaction: ButtonInteraction) {
   return Effect.gen(function* () {

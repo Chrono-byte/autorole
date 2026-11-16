@@ -15,7 +15,7 @@ import {
   type ThreadChannel,
 } from "discord.js";
 import { Effect, Result, Semaphore } from "effect";
-import { discordRequest } from "@autorole/discord-framework";
+import { deferEphemeral, editResponse, discordRequest } from "@autorole/discord-framework";
 import { ConfigurationError, DiscordRequestError } from "../../errors";
 import { logError } from "../../logger";
 import { SuggestionMessages } from "./SuggestionMessages";
@@ -87,7 +87,7 @@ export class Suggestions {
       interaction.guildId !== suggestionGuildId
     )
       return;
-    yield* discordRequest(() => interaction.deferReply({ flags: MessageFlags.Ephemeral }));
+    yield* deferEphemeral(interaction);
     const handled = interaction.customId.startsWith(closePrefix)
       ? this.close(interaction)
       : interaction.customId.startsWith("suggestions:reopen:")
@@ -99,10 +99,9 @@ export class Suggestions {
         Effect.catch((error) =>
           logError("suggestions_interaction_failed", { type: error.name }).pipe(
             Effect.andThen(
-              discordRequest(() =>
-                interaction.editReply(
-                  "I couldn't complete that request. Please try again or contact an officer.",
-                ),
+              editResponse(
+                interaction,
+                "I couldn't complete that request. Please try again or contact an officer.",
               ).pipe(Effect.ignore),
             ),
           ),
@@ -205,17 +204,16 @@ export class Suggestions {
         : interaction.channelId === id &&
           interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages));
     if (!permitted) {
-      yield* discordRequest(() => interaction.editReply("You can't reopen this suggestion here."));
+      yield* editResponse(interaction, "You can't reopen this suggestion here.");
       return;
     }
     const active = yield* this.store.getByUser(entry.userId);
     if (active) {
-      yield* discordRequest(() =>
-        interaction.editReply(
-          active.threadId === id
-            ? "This suggestion is already open."
-            : "Close the current suggestion before reopening another one.",
-        ),
+      yield* editResponse(
+        interaction,
+        active.threadId === id
+          ? "This suggestion is already open."
+          : "Close the current suggestion before reopening another one.",
       );
       return;
     }
@@ -249,14 +247,13 @@ export class Suggestions {
     );
     if (Result.isSuccess(confirmation))
       yield* this.store.trackControls(id, confirmation.success.channelId, confirmation.success.id);
-    yield* discordRequest(() =>
-      interaction.editReply(
-        Result.isFailure(confirmation)
-          ? "Suggestion reopened, but I couldn't notify the member."
-          : isDm || interaction.channelId === suggestionPanelChannelId
-            ? "Suggestion reopened. Check your DMs to continue."
-            : `Suggestion with <@${entry.userId}> reopened. Replies here will be sent to them.`,
-      ),
+    yield* editResponse(
+      interaction,
+      Result.isFailure(confirmation)
+        ? "Suggestion reopened, but I couldn't notify the member."
+        : isDm || interaction.channelId === suggestionPanelChannelId
+          ? "Suggestion reopened. Check your DMs to continue."
+          : `Suggestion with <@${entry.userId}> reopened. Replies here will be sent to them.`,
     );
   });
 
@@ -347,8 +344,9 @@ export class Suggestions {
         }),
       );
       yield* this.store.trackControls(entry.threadId, dm.id, confirmation.id);
-      yield* discordRequest(() =>
-        interaction.editReply("You already have an open suggestion. Check your DMs to continue."),
+      yield* editResponse(
+        interaction,
+        "You already have an open suggestion. Check your DMs to continue.",
       );
       return;
     }
@@ -357,23 +355,21 @@ export class Suggestions {
       const recovered = yield* this.recover(inbox, interaction.user.id, previous?.threadId);
       if (recovered) {
         yield* this.store.remember(interaction.user.id, recovered.id);
-        yield* discordRequest(() =>
-          interaction.editReply({
-            content: "Continue your previous suggestion or start a new one?",
-            components: [
-              new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                  .setCustomId(`suggestions:reopen:${recovered.id}`)
-                  .setLabel("Continue previous suggestion")
-                  .setStyle(ButtonStyle.Primary),
-                new ButtonBuilder()
-                  .setCustomId("suggestions:new")
-                  .setLabel("New suggestion")
-                  .setStyle(ButtonStyle.Secondary),
-              ),
-            ],
-          }),
-        );
+        yield* editResponse(interaction, {
+          content: "Continue your previous suggestion or start a new one?",
+          components: [
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder()
+                .setCustomId(`suggestions:reopen:${recovered.id}`)
+                .setLabel("Continue previous suggestion")
+                .setStyle(ButtonStyle.Primary),
+              new ButtonBuilder()
+                .setCustomId("suggestions:new")
+                .setLabel("New suggestion")
+                .setStyle(ButtonStyle.Secondary),
+            ),
+          ],
+        });
         return;
       }
     }
@@ -424,9 +420,7 @@ export class Suggestions {
         ),
       ),
     );
-    yield* discordRequest(() =>
-      interaction.editReply("Your suggestion conversation is open. Check your DMs."),
-    );
+    yield* editResponse(interaction, "Your suggestion conversation is open. Check your DMs.");
   });
 
   private recover = Effect.fn("Suggestions.recover")(function* (
@@ -551,16 +545,14 @@ export class Suggestions {
   ) {
     const isDm = interaction.guildId === null;
     if (!isDm && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
-      yield* discordRequest(() =>
-        interaction.editReply("Only moderators can close a suggestion here."),
-      );
+      yield* editResponse(interaction, "Only moderators can close a suggestion here.");
       return;
     }
     const entry = isDm
       ? yield* this.store.getByUser(interaction.user.id)
       : yield* this.store.getByThread(interaction.channelId);
     if (!entry || interaction.customId !== `${closePrefix}${entry.threadId}`) {
-      yield* discordRequest(() => interaction.editReply("This suggestion is already closed."));
+      yield* editResponse(interaction, "This suggestion is already closed.");
       return;
     }
     const inbox = yield* this.inbox();
@@ -607,10 +599,9 @@ export class Suggestions {
         await thread.setArchived(true, "Suggestion closed");
       }),
     );
-    yield* discordRequest(() =>
-      interaction.editReply(
-        `Suggestion closed.${notifyFailed ? " I couldn't notify the member." : ""}${Result.isFailure(archived) ? " I couldn't archive the thread." : ""}`,
-      ),
+    yield* editResponse(
+      interaction,
+      `Suggestion closed.${notifyFailed ? " I couldn't notify the member." : ""}${Result.isFailure(archived) ? " I couldn't archive the thread." : ""}`,
     );
   });
 }

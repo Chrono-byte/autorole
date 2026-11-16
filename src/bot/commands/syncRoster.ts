@@ -1,6 +1,6 @@
 import { type Guild } from "discord.js";
 import { Effect, Result } from "effect";
-import { discordRequest, roleAssignability } from "@autorole/discord-framework";
+import { discordRequest, forEachGuildMember, roleAssignability } from "@autorole/discord-framework";
 import { ConfigurationError } from "../../errors";
 
 export const rosterGuildId = "1415400507006124093";
@@ -63,24 +63,18 @@ export const syncRoster = Effect.fn("Roster.sync")(function* (guild: Guild, acto
   }
 
   const changes: { id: string; add: boolean }[] = [];
-  let after: string | undefined;
-  for (;;) {
-    const page = yield* discordRequest(() =>
-      guild.members.list({ limit: 1000, after, cache: false }),
-    );
-    for (const member of page.values()) {
-      const hasPlayer = member.roles.cache.has(playerRoleId);
-      const hasTeam = teamRoleIds.some((id) => member.roles.cache.has(id));
-      if (hasPlayer !== hasTeam) changes.push({ id: member.id, add: hasTeam });
-    }
-    if (page.size < 1000) break;
-    const last = page.last();
-    if (!last || last.id === after)
-      return yield* new ConfigurationError({
-        message: "Could not read the complete member list; no changes were made.",
-      });
-    after = last.id;
-  }
+  yield* forEachGuildMember(
+    guild,
+    (member) =>
+      Effect.sync(() => {
+        const hasPlayer = member.roles.cache.has(playerRoleId);
+        const hasTeam = teamRoleIds.some((id) => member.roles.cache.has(id));
+        if (hasPlayer !== hasTeam) changes.push({ id: member.id, add: hasTeam });
+      }),
+    new ConfigurationError({
+      message: "Could not read the complete member list; no changes were made.",
+    }),
+  );
 
   let added = 0;
   let removed = 0;

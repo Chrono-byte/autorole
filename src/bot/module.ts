@@ -1,20 +1,16 @@
 import { Events, type Client } from "discord.js";
 import { Effect } from "effect";
-import { buttonEvent, event, CommandRegistry } from "@autorole/discord-framework";
-import { makeCommandRegistry } from "./commands/AutoroleCommands";
+import { buttonEvent, event } from "@autorole/discord-framework";
+import { commandCatalog } from "./commands";
 import { OutstandingAssignments } from "./assignments/OutstandingAssignments";
+import { serverMemberCounter } from "./member-counter/ServerStats";
 import { RoleService } from "./RoleService";
 import { Suggestions } from "./suggestions/Suggestions";
-import { StatsStore } from "./StatsStore";
-import { automaticRosterMember, rosterChanged } from "./AutomaticRoster";
+import { StatsStore } from "./member-counter/StatsStore";
+import { automaticRoster, automaticRosterMember, rosterChanged } from "./AutomaticRoster";
 import { rosterGuildId } from "./commands/syncRoster";
 import { AgreementStore } from "./guidelines/AgreementStore";
-import {
-  guidelinesButton,
-  guidelinesCommands,
-  isGuidelinesButton,
-} from "./guidelines/GuidelinesCommand";
-import { serverStatsCommands } from "./commands/ServerStatsCommand";
+import { guidelinesButton, isGuidelinesButton } from "./guidelines/GuidelinesCommand";
 
 export const makeAutorole = Effect.fn("Autorole.make")(function* (
   client: Client,
@@ -44,14 +40,12 @@ export const makeAutorole = Effect.fn("Autorole.make")(function* (
   );
   yield* agreements.deactivate(rosterGuildId);
   return {
-    stats,
-    commands: CommandRegistry.combine([
-      makeCommandRegistry(roles),
-      serverStatsCommands(stats),
-      guidelinesCommands(agreements),
-    ]),
-    start: assignments.start(),
-    teamGate: Effect.void,
+    commands: commandCatalog.bind({ roles, stats, agreements }),
+    background: [
+      () => assignments.start(),
+      automaticRoster,
+      (readyClient: Client<true>) => serverMemberCounter(readyClient, stats),
+    ],
     events: [
       buttonEvent(isGuidelinesButton, (interaction) => guidelinesButton(agreements, interaction)),
       buttonEvent(

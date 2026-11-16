@@ -301,6 +301,7 @@ test("bot runner starts module before readiness and shuts down on readiness fail
   ) {
     calls.push("login");
     this.emit(Events.ClientReady, this as import("discord.js").Client<true>);
+    this.emit(Events.ClientReady, this as import("discord.js").Client<true>);
     return "token";
   });
   const destroy = spyOn(Client.prototype, "destroy").mockImplementation(async () => {
@@ -319,6 +320,21 @@ test("bot runner starts module before readiness and shuts down on readiness fail
                 calls.push("setup");
                 return {
                   commands: new CommandRegistry([]),
+                  background: [
+                    (readyClient: import("discord.js").Client<true>) =>
+                      Effect.sync(() => {
+                        expect(readyClient === client).toBe(true);
+                        calls.push("background started");
+                      }).pipe(
+                        Effect.andThen(Effect.never),
+                        Effect.ensuring(
+                          Effect.sync(() => {
+                            calls.push("background stopped");
+                          }),
+                        ),
+                      ),
+                    () => Effect.fail(new Error("background failed")),
+                  ],
                   events: [
                     event(
                       Events.ClientReady,
@@ -340,7 +356,10 @@ test("bot runner starts module before readiness and shuts down on readiness fail
             Effect.sync(() => {
               calls.push(error.message);
             }),
-          reportHandler: () => Effect.void,
+          reportHandler: (error) =>
+            Effect.sync(() => {
+              calls.push(error.message);
+            }),
           reportDiscord: () => Effect.void,
         }),
       ),
@@ -349,8 +368,11 @@ test("bot runner starts module before readiness and shuts down on readiness fail
       "setup",
       "login",
       "module ready",
+      "background started",
+      "background failed",
       "ready",
       "notification failed",
+      "background stopped",
       "destroy",
     ]);
     expect(runningClient?.listenerCount(Events.ClientReady)).toBe(0);
@@ -480,4 +502,56 @@ test("conflicting modules fail before login and release acquired resources", asy
     login.mockRestore();
     destroy.mockRestore();
   }
+});
+
+test("combined command catalogs select feature dependencies and retain permission checks", async () => {
+  const { CommandCatalog } = await import("@autorole/discord-framework");
+  const calls: string[] = [];
+  const first = new CommandCatalog<string>([
+    {
+      definition: { name: "first", toJSON: () => ({ name: "first" }) },
+      run: (value) =>
+        Effect.sync(() => {
+          calls.push(value);
+        }),
+    },
+  ]);
+  const second = new CommandCatalog<number>([
+    {
+      definition: { name: "second", toJSON: () => ({ name: "second" }) },
+      permissions: { guildOnly: true },
+      run: (value) =>
+        Effect.sync(() => {
+          calls.push(String(value));
+        }),
+    },
+  ]);
+  const combined = CommandCatalog.combine([
+    first.mapContext((context: { label: string; count: number }) => context.label),
+    second.mapContext((context: { label: string; count: number }) => context.count),
+  ]);
+  expect(combined.definitions.map((definition) => definition.toJSON().name)).toEqual([
+    "first",
+    "second",
+  ]);
+  const registry = combined.bind({ label: "feature", count: 42 });
+  await Effect.runPromise(
+    registry.dispatch({ commandName: "first" } as import("discord.js").ChatInputCommandInteraction),
+  );
+  await expect(
+    Effect.runPromise(
+      registry.dispatch({
+        commandName: "second",
+        guildId: null,
+      } as import("discord.js").ChatInputCommandInteraction),
+    ),
+  ).rejects.toThrow();
+  await Effect.runPromise(
+    registry.dispatch({
+      commandName: "second",
+      guildId: "guild",
+    } as import("discord.js").ChatInputCommandInteraction),
+  );
+  expect(calls).toEqual(["feature", "42"]);
+  expect(() => CommandCatalog.combine([first, first])).toThrow("Duplicate command: first");
 });

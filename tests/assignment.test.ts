@@ -1,3 +1,4 @@
+import { commandCatalog } from "../src/bot/commands";
 import { expect, spyOn, test } from "bun:test";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -17,7 +18,7 @@ import { tryPromise } from "../src/effectful";
 import { OutstandingAssignments } from "../src/bot/assignments/OutstandingAssignments";
 import { readConfiguration } from "../src/config/Configuration";
 import { RoleService } from "../src/bot/RoleService";
-import { commandDefinitions, makeCommandRegistry } from "../src/bot/commands/AutoroleCommands";
+import { autoroleCommands } from "../src/bot/commands/AutoroleCommands";
 import { makeAutorole } from "../src/bot/module";
 import { install } from "@autorole/discord-framework";
 
@@ -77,7 +78,9 @@ class DiscordFixture {
     ) {
       return [
         {
-          ...commandDefinitions.find((definition) => definition.name === "autorole")?.toJSON(),
+          ...commandCatalog.definitions
+            .find((definition) => definition.name === "autorole")
+            ?.toJSON(),
           id: ids.command,
           application_id: ids.app,
           version: ids.command,
@@ -276,7 +279,7 @@ test("missing Manage Roles and insufficient hierarchy prevent role assignment", 
 });
 
 test("command definitions serialize without constructing runtime dependencies", () => {
-  expect(commandDefinitions.map((definition) => definition.toJSON().name)).toEqual([
+  expect(commandCatalog.definitions.map((definition) => definition.toJSON().name)).toEqual([
     "sync-roster",
     "preban",
     "autorole",
@@ -285,7 +288,7 @@ test("command definitions serialize without constructing runtime dependencies", 
     "guidelines-status",
   ]);
   expect(
-    commandDefinitions.find((definition) => definition.name === "autorole")?.toJSON(),
+    commandCatalog.definitions.find((definition) => definition.name === "autorole")?.toJSON(),
   ).toMatchObject({
     name: "autorole",
     default_member_permissions: "0",
@@ -703,6 +706,16 @@ test("autorole module handles a join and removes its listeners on scope exit", a
             path: ":memory:",
             report: () => Effect.void,
           });
+          expect(module.commands.definitions.map((definition) => definition.toJSON().name)).toEqual(
+            [
+              "sync-roster",
+              "preban",
+              "autorole",
+              "member-counter",
+              "guidelines-renew",
+              "guidelines-status",
+            ],
+          );
           yield* install(fixture.client, module.commands, module.events, () => Effect.void);
           fixture.client.emit(Events.GuildMemberAdd, member);
           yield* tryPromise(() => written.promise);
@@ -718,7 +731,7 @@ test("autorole module handles a join and removes its listeners on scope exit", a
 
 test("autorole command catalog dispatches permission-denied status", async () => {
   const { MessageFlags } = await import("discord.js");
-  const registry = makeCommandRegistry(new RoleService());
+  const registry = autoroleCommands.bind(new RoleService());
   let statusReply = "";
   let deferred: unknown;
   const status = {
@@ -744,7 +757,7 @@ test("autorole command catalog dispatches permission-denied status", async () =>
 test("autorole status routes an authorized interaction and uses the configured role", async () => {
   await withDiscord(async (fixture) => {
     const { member, roles } = await fixture.setup();
-    const registry = makeCommandRegistry(roles);
+    const registry = autoroleCommands.bind(roles);
     let deferred: unknown;
     let message = "";
     const interaction = {

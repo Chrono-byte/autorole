@@ -1,6 +1,6 @@
 import { ChannelType, PermissionFlagsBits, type Client, type Guild } from "discord.js";
 import { Effect, Result, Schedule } from "effect";
-import { discordRequest, roleAssignability } from "@autorole/discord-framework";
+import { discordRequest, forEachGuildMember, roleAssignability } from "@autorole/discord-framework";
 import { ConfigurationError } from "../../errors";
 import { logError } from "../../logger";
 import { rosterGuildId, teamRoleIds } from "../commands/syncRoster";
@@ -132,28 +132,21 @@ export const reconcileTeamGate = Effect.fn("TeamGate.reconcile")(function* (
   if (!active) return { changed: 0, failed: [] as string[], conflicts: [] as string[] };
   const { direct, bypassRoles } = yield* validateTeamGate(guild, mapping);
   const members: string[] = [];
-  let after: string | undefined;
-  for (;;) {
-    const page = yield* discordRequest(() =>
-      guild.members.list({ limit: 1000, after, cache: false }),
-    );
-    for (const member of page.values())
-      if (
-        mapping.some(
-          ({ team, pending }) => member.roles.cache.has(team) || member.roles.cache.has(pending),
-        ) ||
-        direct.has(member.id) ||
-        [...bypassRoles].some((id) => member.roles.cache.has(id))
-      )
-        members.push(member.id);
-    if (page.size < 1000) break;
-    const last = page.last();
-    if (!last || last.id === after)
-      return yield* new ConfigurationError({
-        message: "Could not read all members; no team roles were changed.",
-      });
-    after = last.id;
-  }
+  yield* forEachGuildMember(
+    guild,
+    (member) =>
+      Effect.sync(() => {
+        if (
+          mapping.some(
+            ({ team, pending }) => member.roles.cache.has(team) || member.roles.cache.has(pending),
+          ) ||
+          direct.has(member.id) ||
+          [...bypassRoles].some((id) => member.roles.cache.has(id))
+        )
+          members.push(member.id);
+      }),
+    new ConfigurationError({ message: "Could not read all members; no team roles were changed." }),
+  );
   let changed = 0;
   const failed: string[] = [],
     conflicts: string[] = [];

@@ -262,7 +262,7 @@ test("interrupting a command does not send an error response", async () => {
 });
 
 test("autorole status denies missing permissions through its subcommand route", async () => {
-  const { makeCommandRegistry } = await import("../src/bot/commands/AutoroleCommands");
+  const { autoroleCommands } = await import("../src/bot/commands/AutoroleCommands");
   const { RoleService } = await import("../src/bot/RoleService");
   const client = new Client({ intents: [] });
   const delivered = Promise.withResolvers<void>();
@@ -289,7 +289,7 @@ test("autorole status denies missing permissions through its subcommand route", 
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          yield* install(client, makeCommandRegistry(new RoleService()), [], (error) =>
+          yield* install(client, autoroleCommands.bind(new RoleService()), [], (error) =>
             Effect.sync(() => {
               errors.push(error.message);
             }),
@@ -311,9 +311,9 @@ test("autorole status denies missing permissions through its subcommand route", 
 });
 
 test("preban requires permission and displays the target avatar after banning", async () => {
-  const { makeCommandRegistry } = await import("../src/bot/commands/AutoroleCommands");
+  const { autoroleCommands } = await import("../src/bot/commands/AutoroleCommands");
   const { RoleService } = await import("../src/bot/RoleService");
-  const registry = makeCommandRegistry(new RoleService());
+  const registry = autoroleCommands.bind(new RoleService());
   const calls: unknown[] = [];
   let response: unknown;
   const interaction = {

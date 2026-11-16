@@ -2,8 +2,8 @@ import { Database } from "bun:sqlite";
 import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { Effect, Schema } from "effect";
-import { asError } from "../effectful";
-import { StorageError } from "../errors";
+import { asError } from "../../effectful";
+import { StorageError } from "../../errors";
 
 const decode = Schema.decodeUnknownSync(
   Schema.Array(Schema.Struct({ guildId: Schema.String, channelId: Schema.String })),

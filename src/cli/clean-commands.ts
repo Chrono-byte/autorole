@@ -1,6 +1,6 @@
 import { ApplicationCommandType, REST, Routes } from "discord.js";
 import { Effect, Schema } from "effect";
-import { commandDefinitions } from "../bot/commands/AutoroleCommands";
+import { commandCatalog } from "../bot/commands";
 import { readConfiguration, type Configuration } from "../config/Configuration";
 import { trySync } from "../effectful";
 import { ConfigurationError, discordRequest } from "../errors";
@@ -43,7 +43,7 @@ export class CommandCleaner {
             }),
         ),
       );
-      const ours = new Set(commandDefinitions.map((definition) => definition.name));
+      const ours = new Set(commandCatalog.definitions.map((definition) => definition.name));
       const obsolete = commands.filter(
         (command) => command.type === ApplicationCommandType.ChatInput && !ours.has(command.name),
       );

@@ -2,54 +2,82 @@
 
 Overwatch Esports at IU Indianapolis
 
-This code applies to players, substitutes, coaches, and other members when taking part in organization activities or communicating about team participation, including in Discord and team chats.
+Our purpose is to build a welcoming community where members can compete, improve, and enjoy Overwatch together. Mutual respect means helping others participate, being dependable, and taking responsibility for how our actions affect the team.
 
-## How we treat each other
+This code applies to players, substitutes, coaches, officers, and other members during organization activities and communications directly related to team participation, including Discord and team chats. The same expectations apply regardless of rank, roster position, or leadership role.
 
-1. **Communicate respectfully.** Be clear and respectful in person and online, including when you disagree. Good-faith criticism and disagreement are welcome.
-2. **Treat people with respect.** Threats, intimidation, bullying, discriminatory harassment, sexual misconduct, and hazing are prohibited as defined by applicable IU policies. Do not discriminate in membership, team opportunities, or participation on any basis prohibited by university policy.
-3. **Keep feedback constructive.** Don't repeatedly ridicule a teammate, encourage others to target them, or disrupt practices, matches, or discussions with personal insults.
-4. **Respect boundaries.** Stop personal jokes, teasing, or unwanted contact when someone asks you to stop. Make a good-faith effort to use people's stated names and pronouns; an accidental mistake alone is not a violation. Do not share someone's private information without permission to threaten, intimidate, or expose them to unwanted contact. You may keep and share relevant evidence when reporting a concern or responding to an allegation.
-5. **Do not retaliate.** Do not threaten, intimidate, or penalize someone for making a good-faith report, providing evidence, participating in a review, or refusing to participate in misconduct. You can make a report in good faith even if the evidence does not establish a violation. Nobody has to confront someone or try mediation before making a report.
-6. **Play fair.** Follow game, tournament, and league rules. Do not cheat, intentionally sabotage play, or threaten or harass opponents or other participants.
-7. **Handle frustration without mistreating others.** Feeling frustrated or having a single emotional reaction is not a violation, but you are still responsible for how you treat people.
-8. **Take responsibility.** These rules apply during organization activities and related conversations, including outside games. When appropriate, acknowledge mistakes, follow decisions made under the applicable procedures, and take reasonable steps to repair harm.
+## Our commitments to each other
 
-## Reporting a concern
+- Help others learn and contribute. Share useful information, explain team routines to newcomers, and recognize specific improvements. Give teammates room to ask questions, admit mistakes, and offer a different view.
 
-You can bring a concern to any officer. See [#officers](https://discord.com/channels/1415400507006124093/1564391427746701432) for a list of officers and their Discord contacts. If it involves an officer, you can go to another officer. Officers will handle reports discreetly and share personal information only as needed to review a concern, allow a fair response, carry out a decision, or meet reporting obligations. They cannot promise absolute confidentiality.
+- Make realistic commitments and follow through. Prepare for agreed practices and matches, communicate availability and changes as early as reasonably possible, and raise difficulties before they become recurring problems. Teammates and leaders should clarify constraints and adjust plans rather than assume that a missed commitment shows disrespect.
 
-Disagreement, good-faith criticism, accidental mistakes, and expression protected by law or university policy are not violations by themselves. Offense or discomfort alone does not justify discipline. Officers must identify the conduct at issue and consider its context, severity, repetition, and effect on participation.
+- Disagree with care. Listen to the other person's account, ask for clarification, and explain the action or decision you disagree with. Good-faith criticism of teammates, coaches, and officers is welcome. Skill, seniority, or authority does not make someone's perspective beyond question.
 
-For membership discipline and officer removal, the affected person, complainant, officers directly involved in the allegations, and officers with a direct personal interest in the outcome cannot deliberate, vote, or count toward quorum, as required by Article VIII of the constitution.
+- Respect boundaries. Stop personal jokes, teasing, or unwanted personal contact when asked. Make a good-faith effort to use people's stated names and pronouns. An accidental mistake alone is not a violation. Members may state a boundary without disclosing private personal information to the team.
 
-The organization decides whether conduct violates this code; it does not decide whether someone has violated university policy. This process does not prevent anyone from using university reporting procedures or remove any reporting obligation. University policy and the constitution take precedence if they conflict with this code.
+- Take responsibility and follow through on repair. Hear how your conduct affected others, acknowledge your part when appropriate, and make practical changes. Frustration or a single emotional reaction is not itself a violation, but everyone remains responsible for their treatment of others.
 
-## How officers respond
+These commitments guide how we work together. They do not require friendship, constant enthusiasm, agreement with every decision, or a particular personality. Quiet participation, honest disagreement, and asking for help are compatible with being a good teammate. Falling short of an aspiration does not automatically establish misconduct.
 
-Officers should choose a response that fits the conduct. Depending on the situation, they may:
+## Setting teams up for success
 
-- Talk with someone, clarify expectations, offer coaching, or ask them to stop or correct the conduct.
-- Give a written warning that explains the conduct, what needs to change, and any follow-up.
-- Restrict participation in certain activities or on a team. A restriction must state its scope and duration or review date.
-- Take further action permitted by the constitution or university policy, or refer the matter to the university when appropriate or required.
+At the start of each semester, team leaders should develop a short working agreement with players, substitutes, and coaches. It should set out the team's competitive goals, sustainable time commitment, practice schedule, readiness expectations, absence notices, substitute arrangements, and realistic response times outside matches. Members are not expected to be constantly available.
 
-A coaching conversation is not a disciplinary finding. These responses are not automatic penalties or steps that must be followed in order. Officers should consider the context, severity, repetition, impact, and relevant prior conduct. Serious misconduct may warrant action without a prior warning, but repetition alone does not determine the outcome.
+The agreement should identify who schedules activities, who makes live calls, how members raise missing information or disagreements, and when decisions will be reviewed. Pair it with a practice plan that names current learning goals. Revisit both when availability, team needs, or goals change.
 
-Membership suspension or removal and officer removal follow Articles III, IV, and VIII of the constitution. The affected person receives written allegations, at least seven calendar days' notice, and an opportunity to respond. A final decision requires affirmative votes from at least three-fourths of all eligible disinterested officers in office, rounded up. Article VIII also covers written decisions, appeals, and review of urgent temporary restrictions.
+Coaches and captains should prepare sessions, communicate changes promptly, explain development goals and roster criteria, and provide an opportunity to discuss feedback or selection decisions. Officers should explain organizational decisions, respond to concerns, and acknowledge their own mistakes. Include substitutes in the information and preparation relevant to their role.
 
-Discord moderation and bans follow Article X. A Discord restriction alone does not revoke membership or election eligibility. Officers must provide affected members with official notices and access to officer-election ballots through another accessible channel, as the constitution requires.
+Working agreements operate within officer-approved policy under Article V of the constitution. They cannot waive this code's protections, create disciplinary authority, or change membership rights. Competitive selection may depend on performance, attendance, team needs, and league eligibility; it is distinct from a misconduct finding.
 
-## Approval and semester review
+## Feedback and learning
 
-Officers will develop and review this code and accountability framework with the advisor and invite feedback from players, substitutes, coaches, and other members. Officers will vote on the final version with the advisor present, following Article VI's notice, quorum, and voting rules. Member feedback, including an informal poll, does not replace the officer vote.
+Useful feedback identifies a specific situation, describes what happened, explains its effect, and invites the other person's account before agreeing on a next action. For example: "On our second defense, we pushed before regrouping and entered separately. What information were we each acting on, and how should we confirm the next engage?" Apply the same specificity when recognizing good play.
 
-The Secretary will keep the approved version, its effective date, and a record of the vote. Substantive changes follow the same consultation and approval process, subject to the constitution. Clerical corrections that do not change the rules do not need a new vote.
+During live play, keep communication relevant and actionable. Use review time to examine disputed decisions and explanations. After practice or a match, teams should briefly consider what they intended, what happened, what helped, and what adjustment to try next. Replay moments can help ground the discussion. Give members an opportunity to contribute, including afterward in writing.
 
-At the start of each fall and spring semester, the Secretary will share the approved code and accountability framework with all new and returning members. Officers will review them at a meeting or electronically and explain how to ask questions, get an accessible copy, and acknowledge them. Members who join later will receive the same materials and a chance to ask questions.
+Feedback should address gameplay, communication, or behavior rather than a person's worth. Members may correct an inaccurate account, ask questions, or disagree with coaching. Repeated ridicule, organizing others to target a teammate, and personal insults that disrupt practices, matches, or discussions are prohibited. Receiving coaching does not require accepting mistreatment.
 
-Each fall and spring semester, players, substitutes, and coaches must confirm that they have reviewed and understand both documents and agree to follow them. Officers will announce a deadline before the first competitive event. Players and substitutes must complete the acknowledgment before competing; coaches must complete it before serving in that role. This requirement alone does not revoke membership or election eligibility.
+## Conduct boundaries
 
-Members may acknowledge the documents through the organization's designated system or another accessible method arranged with an officer. The Secretary will record the member's identity, the versions acknowledged, and the date. Authorized officers and the advisor may access these records. The acknowledgment applies to those versions for that semester.
+Threats, intimidation, bullying, discriminatory harassment, sexual misconduct, and hazing are prohibited as defined by applicable university policies. Members must not discriminate in membership, team opportunities, or participation on any basis prohibited by university policy.
 
-After a substantive change, officers will share the revised document, explain the changes, and set a reasonable deadline for a new acknowledgment. New players and substitutes must acknowledge the current version before competing, and new coaches before serving. An accessible alternative to Discord will be available when needed.
+Members must follow applicable game, tournament, and league rules. Cheating, intentionally sabotaging play, and threatening or harassing opponents or other participants are prohibited.
+
+Do not share another person's private information without permission to threaten, intimidate, or expose them to unwanted contact. Relevant evidence may be retained and shared when reporting a concern or responding to an allegation.
+
+Retaliation against anyone for making a good-faith report, providing evidence, participating in a review, or refusing misconduct is prohibited. This includes threats, intimidation, and penalties affecting participation or membership. A report can be made in good faith even when the evidence does not establish a violation.
+
+## Addressing concerns and repairing harm
+
+For ordinary friction, members may clarify what happened, explain the effect on participation, and agree on a practical change. An uninvolved officer may offer a supported conversation if everyone freely agrees. Repair might include correcting a misleading statement, changing how feedback is delivered, or checking whether an agreed change has helped.
+
+Participation in a repair conversation is voluntary and may be ended. Nobody must confront another person, attempt mediation, apologize publicly, forgive, or reconcile as a condition of making a report or receiving protection. Repair does not replace required accountability or university reporting. Threats, harassment, retaliation, coercion, and serious power imbalances require attention to safety and appropriate reporting rather than an improvised mediation.
+
+Members may report a concern to any officer. If it involves an officer, they may approach another officer; concerns about leadership or safety may also be brought to the Advisor or appropriate university office. The Advisor can offer guidance and has applicable university reporting obligations. A coach or officer should not facilitate a complaint about their own conduct.
+
+Officers must handle reports discreetly. Personal information may be shared only as needed to review a concern, allow a fair response, carry out a decision, or meet reporting obligations. Absolute confidentiality cannot be promised.
+
+## Fair accountability
+
+Disagreement, good-faith criticism, accidental mistakes, and expression protected by law or university policy do not, by themselves, establish a violation. Offense or discomfort alone does not justify discipline. Officers must identify the conduct at issue and consider its context, severity, repetition, and effect on participation.
+
+Responses should fit the conduct and may include clarifying expectations, coaching, a written warning, or a restriction permitted by the constitution. A coaching conversation is not a disciplinary finding. Responses are not automatic penalties or a required sequence. Serious misconduct may warrant action without a prior warning. Any participation restriction must state its reason, scope, and duration or review date.
+
+This code is a separate document that supplements the constitution. Membership discipline and officer removal follow Articles III, IV, and VIII, including written allegations, at least seven calendar days' notice, an opportunity to respond, disinterested decision-makers, the required vote, written decisions, and appeal rights. The affected person, complainant, and officers directly involved or with a direct personal interest cannot deliberate, vote, or count toward quorum for those decisions. Urgent temporary restrictions follow Article VIII.
+
+Discord moderation and bans follow Article X. Discord restrictions alone do not revoke membership or election eligibility. Officers must provide affected members with official notices and access to officer-election ballots through another accessible channel.
+
+Officers determine whether conduct violates this code, not whether a person has violated university policy. This process does not limit access to university reporting procedures or remove reporting obligations. The constitution and applicable university requirements take precedence if they conflict with this code.
+
+## Review and adoption
+
+Officers shall seek the Advisor's input and review and invite feedback from players, substitutes, coaches, and other members when developing or revising this code. The Advisor provides experience, guidance, and recommendations, not approval. Adoption and substantive revisions require officer approval under Article VI of the constitution. The Advisor has no vote or veto, and the Advisor's attendance is not a condition of adoption.
+
+The Secretary shall retain the adopted version, effective date, and voting record and make the code available to members. At the start of each fall and spring semester, officers shall review the code and the constitution's accountability procedures with new and returning members and explain how to ask questions and obtain an accessible copy. Members joining later shall receive the same materials and opportunity to ask questions.
+
+Each fall and spring semester, players, substitutes, and coaches must acknowledge that they have reviewed and understand these materials and agree to follow them. Officers shall announce a deadline before the first competitive event. Players and substitutes must acknowledge them before competing, and coaches before serving. Members may ask for clarification before acknowledging. This requirement alone does not revoke membership or election eligibility.
+
+Acknowledgment may be completed through the designated organization system or an accessible alternative arranged with an officer. The Secretary shall record the member's identity, the versions acknowledged, and the date. Authorized officers and the Advisor may access these records. Acknowledgment applies to those versions for that semester.
+
+After a substantive change, officers shall distribute the revised materials, explain the changes, and set a reasonable deadline for renewed acknowledgment. New players and substitutes must acknowledge the current version before competing, and new coaches before serving. An accessible alternative to Discord shall be available when needed.

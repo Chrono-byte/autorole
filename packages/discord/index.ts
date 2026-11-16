@@ -23,7 +23,12 @@ export {
   UnknownSubcommandError,
   type SubcommandRoute,
 } from "./src/commands/subcommands";
-export { deferEphemeral, editResponse, replyEphemeral } from "./src/commands/response";
-export { fetchGuildMember } from "./src/api/members";
+export {
+  deferResponse,
+  deferEphemeral,
+  editResponse,
+  replyEphemeral,
+} from "./src/commands/response";
+export { fetchGuildMember, forEachGuildMember } from "./src/api/members";
 
 export { forwardMessage } from "./src/api/messages";

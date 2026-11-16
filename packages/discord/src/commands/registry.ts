@@ -26,6 +26,19 @@ export class CommandCatalog<Context> {
     }
   }
 
+  static combine<Context>(catalogs: readonly CommandCatalog<Context>[]) {
+    return new CommandCatalog(catalogs.flatMap((catalog) => catalog.commands));
+  }
+
+  mapContext<Outer>(select: (context: Outer) => Context) {
+    return new CommandCatalog<Outer>(
+      this.commands.map(({ run, ...command }) => ({
+        ...command,
+        run: (context, interaction) => run(select(context), interaction),
+      })),
+    );
+  }
+
   get definitions() {
     return this.commands.map(({ definition }) => definition);
   }

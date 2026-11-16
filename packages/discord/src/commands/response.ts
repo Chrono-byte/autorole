@@ -1,6 +1,15 @@
-import { MessageFlags, type ButtonInteraction, type ChatInputCommandInteraction } from "discord.js";
+import {
+  MessageFlags,
+  type ButtonInteraction,
+  type ChatInputCommandInteraction,
+  type InteractionEditReplyOptions,
+} from "discord.js";
 import { Effect } from "effect";
 import { discordRequest } from "../api/request";
+
+export function deferResponse(interaction: ChatInputCommandInteraction | ButtonInteraction) {
+  return discordRequest(() => interaction.deferReply()).pipe(Effect.asVoid);
+}
 
 /** Start a private reply that can be completed later. */
 export function deferEphemeral(interaction: ChatInputCommandInteraction | ButtonInteraction) {
@@ -22,7 +31,7 @@ export function replyEphemeral(
 /** Complete or update the original response; its visibility is fixed by its initial acknowledgement. */
 export function editResponse(
   interaction: ChatInputCommandInteraction | ButtonInteraction,
-  content: string,
+  content: string | InteractionEditReplyOptions,
 ) {
   return discordRequest(() => interaction.editReply(content)).pipe(Effect.asVoid);
 }

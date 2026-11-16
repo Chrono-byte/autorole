@@ -71,7 +71,7 @@ function mockClient(ready: () => void, calls: string[]) {
   };
 }
 
-test("autorole owns login, ready events and scoped shutdown", async () => {
+test("autorole uses the framework lifecycle for login, ready events and scoped shutdown", async () => {
   await withBotEnvironment(async () => {
     delete process.env.NOTIFY_SOCKET;
     const ready = Promise.withResolvers<void>();

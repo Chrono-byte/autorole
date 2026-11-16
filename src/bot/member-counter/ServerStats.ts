@@ -1,7 +1,7 @@
 import { type Client } from "discord.js";
 import { Effect, Schedule } from "effect";
 import { discordRequest } from "@autorole/discord-framework";
-import { logError } from "../logger";
+import { logError } from "../../logger";
 import { StatsStore } from "./StatsStore";
 
 export function refreshServerStats(client: Client, guildId: string, channelId: string) {

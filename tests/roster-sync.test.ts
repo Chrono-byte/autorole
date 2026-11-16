@@ -133,9 +133,9 @@ test("a later member-list page failure prevents every change", async () => {
 });
 
 test("the roster command enforces member and bot permissions before reading members", async () => {
-  const { makeCommandRegistry } = await import("../src/bot/commands/AutoroleCommands");
+  const { autoroleCommands } = await import("../src/bot/commands/AutoroleCommands");
   const { RoleService } = await import("../src/bot/RoleService");
-  const registry = makeCommandRegistry(new RoleService());
+  const registry = autoroleCommands.bind(new RoleService());
   const f = fixture();
   let read = false;
   f.guild.roles.fetch = async () => {

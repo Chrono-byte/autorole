@@ -8,6 +8,7 @@ import { rotatePresence } from "./presence";
 export type BotModule = {
   commands: CommandRegistry;
   events: readonly EventHandler[];
+  background?: readonly ((client: Client<true>) => Effect.Effect<void, Error>)[];
 };
 
 export type BotModuleFactory = (
@@ -19,6 +20,7 @@ export function composeModules(modules: readonly BotModule[]): BotModule {
   return {
     commands: CommandRegistry.combine(modules.map((module) => module.commands)),
     events: modules.flatMap((module) => module.events),
+    background: modules.flatMap((module) => module.background ?? []),
   };
 }
 
@@ -55,6 +57,13 @@ export const runBot = Effect.fn("Discord.runBot")(function* (options: {
               Events.ClientReady,
               (readyClient) =>
                 Effect.gen(function* () {
+                  for (const task of module.background ?? []) {
+                    yield* Effect.forkIn(scope, { startImmediately: true })(
+                      Effect.suspend(() => task(readyClient)).pipe(
+                        Effect.catch(options.reportHandler),
+                      ),
+                    );
+                  }
                   if (options.presence) {
                     const presence = options.presence;
                     yield* Effect.forkIn(scope, { startImmediately: true })(

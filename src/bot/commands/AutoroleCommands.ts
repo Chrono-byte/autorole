@@ -10,6 +10,7 @@ import { Effect, Result } from "effect";
 import {
   CommandCatalog,
   deferEphemeral,
+  deferResponse,
   discordRequest,
   editResponse,
   replyEphemeral,
@@ -18,8 +19,6 @@ import {
 import { logError } from "../../logger";
 import { RoleService } from "../RoleService";
 import { syncRoster } from "./syncRoster";
-import { guidelinesDefinition, guidelinesStatusDefinition } from "../guidelines/GuidelinesCommand";
-import { serverStatsDefinition } from "./ServerStatsCommand";
 
 const autoroleDefinition = new SlashCommandBuilder()
   .setName("autorole")
@@ -55,7 +54,7 @@ const rosterDefinition = new SlashCommandBuilder()
 
 const runningRosterSyncs = new Set<string>();
 
-const catalog = new CommandCatalog<RoleService>([
+export const autoroleCommands = new CommandCatalog<RoleService>([
   {
     definition: rosterDefinition,
     permissions: {
@@ -89,17 +88,6 @@ const catalog = new CommandCatalog<RoleService>([
     ]),
   },
 ]);
-
-export const commandDefinitions = [
-  ...catalog.definitions,
-  serverStatsDefinition,
-  guidelinesDefinition,
-  guidelinesStatusDefinition,
-];
-
-export function makeCommandRegistry(roles: RoleService) {
-  return catalog.bind(roles);
-}
 
 const status = Effect.fn("AutoroleCommands.status")(function* (
   roles: RoleService,
@@ -142,7 +130,7 @@ const preban = Effect.fn("AutoroleCommands.preban")(function* (
     return;
   }
   const reason = interaction.options.getString("reason")?.trim();
-  yield* discordRequest(() => interaction.deferReply());
+  yield* deferResponse(interaction);
   const user = yield* discordRequest(() => interaction.client.users.fetch(userId));
   yield* discordRequest(() =>
     guild.members.ban(userId, {
@@ -150,17 +138,15 @@ const preban = Effect.fn("AutoroleCommands.preban")(function* (
       reason: `By ${interaction.user.id}${reason ? `: ${reason}` : ""}`,
     }),
   );
-  yield* discordRequest(() =>
-    interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setTitle("User banned")
-          .setDescription(`${user.tag} (\`${userId}\`)`)
-          .setThumbnail(user.displayAvatarURL())
-          .addFields({ name: "Reason", value: reason || "No reason provided" }),
-      ],
-    }),
-  );
+  yield* editResponse(interaction, {
+    embeds: [
+      new EmbedBuilder()
+        .setTitle("User banned")
+        .setDescription(`${user.tag} (\`${userId}\`)`)
+        .setThumbnail(user.displayAvatarURL())
+        .addFields({ name: "Reason", value: reason || "No reason provided" }),
+    ],
+  });
 });
 
 const runRosterSync = Effect.fn("AutoroleCommands.syncRoster")(function* (

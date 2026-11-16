@@ -165,7 +165,7 @@ export class AgreementStore {
       )(
         this.db
           .query(
-            "SELECT p.period, p.version, a.agreedAt FROM guideline_period_acceptances a JOIN guideline_periods p ON p.id = a.periodId WHERE p.guildId = ? AND a.memberId = ? ORDER BY a.agreedAt DESC LIMIT 25",
+            "SELECT p.period, p.version, a.agreedAt FROM guideline_period_acceptances a JOIN guideline_periods p ON p.id = a.periodId WHERE p.guildId = ? AND a.memberId = ? ORDER BY a.agreedAt DESC",
           )
           .all(guildId, memberId),
       ),
