@@ -6,8 +6,14 @@ import {
   SlashCommandBuilder,
 } from "discord.js";
 import { Effect } from "effect";
-import { CommandRegistry, replyEphemeral } from "@autorole/discord-framework";
+import {
+  CommandRegistry,
+  deferEphemeral,
+  editResponse,
+  replyEphemeral,
+} from "@autorole/discord-framework";
 import { StatsStore } from "../StatsStore";
+import { refreshServerStats } from "../ServerStats";
 
 export const serverStatsDefinition = new SlashCommandBuilder()
   .setName("member-counter")
@@ -33,11 +39,10 @@ export function serverStatsCommands(store: StatsStore) {
           const channel = interaction.options.getChannel("channel", true);
           if (!guildId || channel.type !== ChannelType.GuildVoice)
             return yield* replyEphemeral(interaction, "Choose a voice channel in this server.");
+          yield* deferEphemeral(interaction);
           yield* store.set(guildId, channel.id);
-          yield* replyEphemeral(
-            interaction,
-            `Member counter set to <#${channel.id}>. It will update within ten minutes.`,
-          );
+          yield* refreshServerStats(interaction.client, guildId, channel.id);
+          yield* editResponse(interaction, `Member counter set to <#${channel.id}> and updated.`);
         }),
     },
   ]);

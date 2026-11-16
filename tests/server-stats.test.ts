@@ -1,7 +1,62 @@
 import { describe, expect, test } from "bun:test";
-import { Collection, type Client } from "discord.js";
+import {
+  ChannelType,
+  Collection,
+  PermissionFlagsBits,
+  PermissionsBitField,
+  type Client,
+  type ChatInputCommandInteraction,
+} from "discord.js";
 import { Effect, Result } from "effect";
 import { refreshServerStats } from "../src/bot/ServerStats";
+import { serverStatsCommands } from "../src/bot/commands/ServerStatsCommand";
+import { StatsStore } from "../src/bot/StatsStore";
+
+test("setting the counter channel immediately updates its name before confirming", async () => {
+  const actions: string[] = [];
+  const channel = {
+    id: "counter",
+    type: ChannelType.GuildVoice,
+    name: "Old name",
+    setName: async (name: string) => actions.push(name),
+  };
+  const interaction = {
+    commandName: "member-counter",
+    guildId: "guild",
+    memberPermissions: new PermissionsBitField(PermissionFlagsBits.ManageGuild),
+    options: { getChannel: () => channel },
+    client: {
+      guilds: {
+        fetch: async () => ({
+          members: {
+            fetch: async () =>
+              new Collection([
+                ["human", { user: { bot: false } }],
+                ["bot", { user: { bot: true } }],
+              ]),
+          },
+          channels: { fetch: async () => channel },
+        }),
+      },
+    },
+    deferReply: async () => actions.push("deferred"),
+    editReply: async (content: string) => actions.push(content),
+  } as unknown as ChatInputCommandInteraction;
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* StatsStore.make(":memory:");
+        yield* serverStatsCommands(store).dispatch(interaction);
+        expect(yield* store.list()).toEqual([{ guildId: "guild", channelId: "counter" }]);
+      }),
+    ),
+  );
+  expect(actions).toEqual([
+    "deferred",
+    "Members: 1",
+    "Member counter set to <#counter> and updated.",
+  ]);
+});
 
 describe("server counters", () => {
   test("excludes bots and updates the member channel", async () => {
@@ -29,7 +84,6 @@ test("counter settings persist across restarts without a bootstrap", async () =>
   const { mkdtempSync, rmSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
-  const { StatsStore } = await import("../src/bot/StatsStore");
   const dir = mkdtempSync(join(tmpdir(), "sigil-stats-"));
   const path = join(dir, "stats.sqlite");
   try {
@@ -60,9 +114,6 @@ test("counter settings persist across restarts without a bootstrap", async () =>
 });
 
 test("counter command requires Manage Server at execution time", async () => {
-  const { serverStatsCommands } = await import("../src/bot/commands/ServerStatsCommand");
-  const { StatsStore } = await import("../src/bot/StatsStore");
-  const { PermissionFlagsBits, PermissionsBitField } = await import("discord.js");
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
