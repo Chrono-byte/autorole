@@ -1,3 +1,4 @@
+import { guildId } from "../src/config/discord";
 import { expect, test } from "bun:test";
 import {
   ApplicationFlagsBitField,
@@ -9,7 +10,6 @@ import {
 import { Effect } from "effect";
 import { setupSuggestions } from "../src/cli/setup-suggestions";
 import {
-  suggestionGuildId,
   suggestionInboxChannelId,
   suggestionOpenId,
   suggestionPanelChannelId,
@@ -20,7 +20,7 @@ const appId = "1551628047323762811",
   staff = "1557133002285387857";
 function fixture() {
   const privateOverwrites = [
-    { id: suggestionGuildId, type: 0, allow: "0", deny: F.ViewChannel.toString() },
+    { id: guildId, type: 0, allow: "0", deny: F.ViewChannel.toString() },
     {
       id: "1564387083642998897",
       type: 0,
@@ -30,21 +30,21 @@ function fixture() {
   ];
   const inbox = {
     id: suggestionInboxChannelId,
-    guild_id: suggestionGuildId,
+    guild_id: guildId,
     type: ChannelType.GuildText,
     parent_id: category,
     permission_overwrites: privateOverwrites,
   };
   const parent = {
     id: category,
-    guild_id: suggestionGuildId,
+    guild_id: guildId,
     type: ChannelType.GuildCategory,
     parent_id: null,
     permission_overwrites: [...privateOverwrites],
   };
   const panel = {
     id: suggestionPanelChannelId,
-    guild_id: suggestionGuildId,
+    guild_id: guildId,
     type: ChannelType.GuildText,
     parent_id: "100000000000000001",
     permission_overwrites: [{ id: staff, type: 0, allow: "0", deny: "0" }],
@@ -61,9 +61,9 @@ function fixture() {
       if (route === Routes.channel(suggestionInboxChannelId)) return inbox;
       if (route === Routes.channel(category)) return parent;
       if (route === Routes.channel(suggestionPanelChannelId)) return panel;
-      if (route === Routes.guildRoles(suggestionGuildId))
+      if (route === Routes.guildRoles(guildId))
         return [
-          { id: suggestionGuildId, permissions: "0" },
+          { id: guildId, permissions: "0" },
           { id: "1564387083642998897", permissions: "0" },
         ];
       if (route === Routes.channelMessages(suggestionPanelChannelId)) return messages;
@@ -85,8 +85,8 @@ function fixture() {
       options: { body: { type: number; allow: string; deny: string } },
     ) => {
       writes.push({ method: "put", route, body: options.body });
-      const i = panel.permission_overwrites.findIndex((o) => o.id === suggestionGuildId);
-      const item = { id: suggestionGuildId, ...options.body };
+      const i = panel.permission_overwrites.findIndex((o) => o.id === guildId);
+      const item = { id: guildId, ...options.body };
       if (i === -1) panel.permission_overwrites.push(item);
       else panel.permission_overwrites[i] = item;
     },
@@ -100,7 +100,7 @@ test("suggestion setup posts once, denies public posting, and updates the panel 
   await Effect.runPromise(setupSuggestions(config, f.rest));
   const blocked =
     F.SendMessages | F.CreatePublicThreads | F.CreatePrivateThreads | F.SendMessagesInThreads;
-  const everyone = f.panel.permission_overwrites.find((o) => o.id === suggestionGuildId);
+  const everyone = f.panel.permission_overwrites.find((o) => o.id === guildId);
   expect(everyone && BigInt(everyone.deny) & blocked).toBe(blocked);
   expect(f.writes.filter((w) => w.method === "post")).toHaveLength(1);
   await Effect.runPromise(setupSuggestions(config, f.rest));

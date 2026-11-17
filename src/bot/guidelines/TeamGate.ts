@@ -2,12 +2,13 @@ import { ChannelType, PermissionFlagsBits, type Guild, type GuildMember } from "
 import { Effect, Result } from "effect";
 import { discordRequest, forEachGuildMember, roleAssignability } from "@autorole/discord-framework";
 import { ConfigurationError } from "../../errors";
-import { rosterGuildId, teamRoleIds } from "../commands/syncRoster";
+import { teamRoleIds } from "../commands/syncRoster";
+import { guildId, officerRoleId } from "../../config/discord";
 import { AgreementStore } from "./AgreementStore";
 
 export const guidelinesChannelId = "1566875132658458675";
 export const sharedTeamsCategoryId = "1565003638852550768";
-export const staffRoleIds = ["1564387083642998897", "1550224203972870194", "1557133002285387857"];
+export const staffRoleIds = [officerRoleId, "1550224203972870194", "1557133002285387857"];
 export const teamDefinitions = [
   {
     category: "1416505110971814080",
@@ -46,7 +47,7 @@ export const validateTeamGate = Effect.fn("TeamGate.validate")(function* (
   guild: Guild,
   mapping: TeamRoles,
 ) {
-  if (guild.id !== rosterGuildId)
+  if (guild.id !== guildId)
     return yield* new ConfigurationError({
       message: "Team gate is only available in the Overwatch server.",
     });
@@ -208,7 +209,7 @@ export const applyMemberAccess = Effect.fn("TeamGate.reconcileMember")(function*
   member: GuildMember,
   store: AgreementStore,
 ) {
-  if (member.guild.id !== rosterGuildId) return;
+  if (member.guild.id !== guildId) return;
   const mapping = yield* resolveTeamRoles(member.guild);
   yield* validateTeamGate(member.guild, mapping);
   yield* updateMemberAccess(member.guild, store, mapping, member.id);

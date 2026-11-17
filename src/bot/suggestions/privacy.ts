@@ -1,9 +1,9 @@
 import { PermissionFlagsBits } from "discord.js";
 
-const guildId = "1415400507006124093";
+import { guildId, officerRoleId } from "../../config/discord";
 const permitted = new Set([
   guildId,
-  "1564387083642998897",
+  officerRoleId,
   "1550224203972870194",
   "1565937863802228818",
   "1415400507006124101",

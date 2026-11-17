@@ -22,11 +22,9 @@ import { SuggestionMessages } from "./SuggestionMessages";
 import { SuggestionStore } from "./SuggestionStore";
 import { privateSuggestionOverwrites } from "./privacy";
 
-export const suggestionGuildId = "1415400507006124093";
+import { guildId, officerCategoryId, officerRoleId } from "../../config/discord";
 export const suggestionPanelChannelId = "1415400508578856993";
 export const suggestionInboxChannelId = "1566116722790895726";
-const officerCategoryId = "1566109875535355994";
-const officerRoleId = "1564387083642998897";
 export const suggestionOpenId = "suggestions:open";
 const closePrefix = "suggestions:close:";
 const conversationButtons = (threadId: string, open = true) =>
@@ -77,14 +75,13 @@ export class Suggestions {
     if (
       (interaction.customId === suggestionOpenId || interaction.customId === "suggestions:new") &&
       interaction.guildId !== null &&
-      (interaction.guildId !== suggestionGuildId ||
-        interaction.channelId !== suggestionPanelChannelId)
+      (interaction.guildId !== guildId || interaction.channelId !== suggestionPanelChannelId)
     )
       return;
     if (
       interaction.customId !== suggestionOpenId &&
       interaction.guildId !== null &&
-      interaction.guildId !== suggestionGuildId
+      interaction.guildId !== guildId
     )
       return;
     yield* deferEphemeral(interaction);
@@ -117,7 +114,7 @@ export class Suggestions {
     if (
       incoming.channel.type !== ChannelType.DM &&
       (!incoming.guildId ||
-        incoming.guildId !== suggestionGuildId ||
+        incoming.guildId !== guildId ||
         !incoming.channel.isThread() ||
         incoming.channel.parentId !== suggestionInboxChannelId)
     )
@@ -189,6 +186,20 @@ export class Suggestions {
     }
   });
 
+  private thread = Effect.fn("Suggestions.thread")(function* (
+    this: Suggestions,
+    id: string,
+    inboxId: string,
+    force = false,
+  ) {
+    const thread = yield* discordRequest(() =>
+      force ? this.client.channels.fetch(id, { force: true }) : this.client.channels.fetch(id),
+    );
+    if (!thread?.isThread() || thread.parentId !== inboxId)
+      return yield* new ConfigurationError({ message: "Suggestion thread is unavailable." });
+    return thread;
+  });
+
   private reopen = Effect.fn("Suggestions.reopen")(function* (
     this: Suggestions,
     interaction: ButtonInteraction,
@@ -218,9 +229,7 @@ export class Suggestions {
       return;
     }
     const inbox = yield* this.inbox();
-    const thread = yield* discordRequest(() => this.client.channels.fetch(id, { force: true }));
-    if (!thread?.isThread() || thread.parentId !== inbox.id)
-      return yield* new ConfigurationError({ message: "Suggestion thread is unavailable." });
+    const thread = yield* this.thread(id, inbox.id, true);
     const user = yield* discordRequest(() => this.client.users.fetch(entry.userId));
     yield* discordRequest(async () => {
       await thread.setArchived(false, "Suggestion reopened");
@@ -264,7 +273,7 @@ export class Suggestions {
     if (
       !channel ||
       channel.type !== ChannelType.GuildText ||
-      channel.guild.id !== suggestionGuildId ||
+      channel.guild.id !== guildId ||
       channel.parentId !== officerCategoryId
     )
       return yield* new ConfigurationError({
@@ -528,9 +537,7 @@ export class Suggestions {
     }
     const inbox = yield* this.inbox();
     if (fromUser) {
-      const thread = yield* discordRequest(() => this.client.channels.fetch(entry.threadId));
-      if (!thread?.isThread() || thread.parentId !== inbox.id)
-        return yield* new ConfigurationError({ message: "Suggestion thread is unavailable." });
+      const thread = yield* this.thread(entry.threadId, inbox.id);
       yield* this.messages.send(message, entry, thread, true, inbox);
     } else {
       const user = yield* discordRequest(() => this.client.users.fetch(entry.userId));
@@ -556,9 +563,7 @@ export class Suggestions {
       return;
     }
     const inbox = yield* this.inbox();
-    const thread = yield* discordRequest(() => this.client.channels.fetch(entry.threadId));
-    if (!thread?.isThread() || thread.parentId !== inbox.id)
-      return yield* new ConfigurationError({ message: "Suggestion thread is unavailable." });
+    const thread = yield* this.thread(entry.threadId, inbox.id);
     if (interaction.message && !interaction.message.flags.has(MessageFlags.Ephemeral))
       yield* this.store.trackControls(
         entry.threadId,

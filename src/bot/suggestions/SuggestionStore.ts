@@ -1,9 +1,6 @@
 import { Database } from "bun:sqlite";
-import { chmodSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import { Effect, Schema } from "effect";
-import { asError } from "../../effectful";
-import { StorageError } from "../../errors";
+import { openStore, operation } from "../storage";
 
 const Entry = Schema.Struct({ userId: Schema.String, threadId: Schema.String });
 const MessageLink = Schema.Struct({
@@ -22,31 +19,11 @@ const Controls = Schema.Array(
 const decodeControls = Schema.decodeUnknownSync(Controls);
 const decode = Schema.decodeUnknownSync(Schema.NullOr(Entry));
 
-function operation<A>(name: string, run: () => A) {
-  return Effect.try({
-    try: run,
-    catch: (cause) => new StorageError({ operation: name, message: asError(cause).message, cause }),
-  });
-}
-
 export class SuggestionStore {
   private constructor(private readonly database: Database) {}
 
   static make = Effect.fn("SuggestionStore.make")(function* (path: string) {
-    const database = yield* Effect.acquireRelease(
-      operation("openSuggestions", () => {
-        if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-        const opened = new Database(path, { create: true });
-        try {
-          if (path !== ":memory:") chmodSync(path, 0o600);
-        } catch (error) {
-          opened.close();
-          throw error;
-        }
-        return opened;
-      }),
-      (db) => Effect.sync(() => db.close()),
-    );
+    const database = yield* openStore(path, "openSuggestions");
     yield* operation("migrateSuggestions", () =>
       database.run(
         "CREATE TABLE IF NOT EXISTS active_suggestions (userId TEXT PRIMARY KEY NOT NULL, threadId TEXT UNIQUE NOT NULL)",

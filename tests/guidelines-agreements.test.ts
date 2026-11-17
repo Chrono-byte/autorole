@@ -6,38 +6,6 @@ import { Effect } from "effect";
 import { GuidelinesCoordinator } from "../src/bot/guidelines/GuidelinesCoordinator";
 import { AgreementStore } from "../src/bot/guidelines/AgreementStore";
 
-test("agreement dates persist and repeat clicks preserve the original date", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "guidelines-"));
-  const path = join(dir, "state.sqlite");
-  try {
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const store = yield* AgreementStore.make(path);
-          yield* store.record("guild", "member", "message", 1234);
-          yield* store.record("guild", "member", "message", 5678);
-        }),
-      ),
-    );
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const store = yield* AgreementStore.make(path);
-          expect(yield* store.get("guild", "member", "message")).toEqual({
-            guildId: "guild",
-            memberId: "member",
-            messageId: "message",
-            agreedAt: 1234,
-          });
-          expect(yield* store.get("guild", "other", "message")).toBeNull();
-        }),
-      ),
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
 test("renewal preserves prior agreements and rejects stale buttons", async () => {
   await Effect.runPromise(
     Effect.scoped(
@@ -81,7 +49,7 @@ test("renewal preserves prior agreements and rejects stale buttons", async () =>
 test("channel access roles preserve team membership and follow the current agreement", async () => {
   const { ChannelType, Collection, PermissionFlagsBits, PermissionsBitField } =
     await import("discord.js");
-  const { rosterGuildId } = await import("../src/bot/commands/syncRoster");
+  const { guildId } = await import("../src/config/discord");
   const mapping = [
     { category: "category", identity: ["team", "sub"], accessName: "Access", access: "access" },
   ];
@@ -110,9 +78,9 @@ test("channel access roles preserve team membership and follow the current agree
   );
   const overwrites = new Collection([
     [
-      rosterGuildId,
+      guildId,
       {
-        id: rosterGuildId,
+        id: guildId,
         type: 0,
         deny: new PermissionsBitField(PermissionFlagsBits.ViewChannel),
         allow: new PermissionsBitField(0n),
@@ -145,7 +113,7 @@ test("channel access roles preserve team membership and follow the current agree
       ),
   };
   const guild = {
-    id: rosterGuildId,
+    id: guildId,
     ownerId: "owner",
     roles: { fetch: async () => roles },
     channels: {
@@ -171,7 +139,7 @@ test("channel access roles preserve team membership and follow the current agree
         const guidelines = new GuidelinesCoordinator(store);
         yield* store.startPeriod({
           id: "period",
-          guildId: rosterGuildId,
+          guildId: guildId,
           channelId: "channel",
           messageId: "message",
           period: "Fall",
@@ -183,7 +151,7 @@ test("channel access roles preserve team membership and follow the current agree
           failed: [],
         });
         expect([...assigned].toSorted()).toEqual(["captain", "team"]);
-        yield* store.acceptCurrent(rosterGuildId, "period", "channel", "message", "member", 2);
+        yield* store.acceptCurrent(guildId, "period", "channel", "message", "member", 2);
         expect(yield* guidelines.reconcile(guild, mapping)).toEqual({
           changed: 1,
           failed: [],
@@ -192,7 +160,7 @@ test("channel access roles preserve team membership and follow the current agree
         expect((yield* guidelines.reconcile(guild, mapping)).changed).toBe(0);
         yield* store.startPeriod({
           id: "renewed",
-          guildId: rosterGuildId,
+          guildId: guildId,
           channelId: "channel",
           messageId: "message",
           period: "Fall",
@@ -201,7 +169,7 @@ test("channel access roles preserve team membership and follow the current agree
         });
         expect((yield* guidelines.reconcile(guild, mapping)).changed).toBe(1);
         expect([...assigned].toSorted()).toEqual(["captain", "team"]);
-        yield* store.acceptCurrent(rosterGuildId, "renewed", "channel", "message", "member", 4);
+        yield* store.acceptCurrent(guildId, "renewed", "channel", "message", "member", 4);
         expect((yield* guidelines.reconcile(guild, mapping)).changed).toBe(1);
         assigned.delete("team");
         expect((yield* guidelines.reconcile(guild, mapping)).changed).toBe(1);

@@ -58,6 +58,29 @@ export class SuggestionMessages {
     });
   }
 
+  private replyId = Effect.fn("SuggestionMessages.replyId")(function* (
+    this: SuggestionMessages,
+    message: Message,
+    threadId: string,
+    destinationId: string,
+    sourceId?: string,
+  ) {
+    const referenced = message.reference?.messageId
+      ? yield* this.store.getMessage(message.reference.messageId)
+      : null;
+    if (referenced?.threadId !== threadId) return;
+    if (
+      referenced.destinationChannelId === destinationId &&
+      (sourceId === undefined || referenced.sourceChannelId === sourceId)
+    )
+      return referenced.destinationId;
+    if (
+      referenced.sourceChannelId === destinationId &&
+      (sourceId === undefined || referenced.destinationChannelId === sourceId)
+    )
+      return referenced.sourceId;
+  });
+
   private threadPayload = Effect.fn("SuggestionMessages.threadPayload")(function* (
     this: SuggestionMessages,
     message: Message,
@@ -112,19 +135,7 @@ export class SuggestionMessages {
     const recipient = fromUser
       ? "officers"
       : `${user.globalName ?? user.username} (@${user.username})`;
-    const linked = message.reference?.messageId
-      ? yield* this.store.getMessage(message.reference.messageId)
-      : null;
-    const replyId =
-      linked?.threadId === entry.threadId
-        ? linked.sourceChannelId === message.channelId &&
-          linked.destinationChannelId === destination.id
-          ? linked.destinationId
-          : linked.destinationChannelId === message.channelId &&
-              linked.sourceChannelId === destination.id
-            ? linked.sourceId
-            : undefined
-        : undefined;
+    const replyId = yield* this.replyId(message, entry.threadId, destination.id, message.channelId);
     const transport = fromUser
       ? yield* this.memberTransport(inbox, entry.threadId, message)
       : yield* messageTransport({ type: "channel", channel: destination });
@@ -156,17 +167,7 @@ export class SuggestionMessages {
     if (message.author.bot || message.webhookId || message.author.id !== link.authorId) return;
     if (link.webhookId) {
       const transport = yield* this.memberTransport(inbox, link.threadId, message, link.webhookId);
-      const referenced = message.reference?.messageId
-        ? yield* this.store.getMessage(message.reference.messageId)
-        : null;
-      const replyId =
-        referenced?.threadId === link.threadId
-          ? referenced.destinationChannelId === link.threadId
-            ? referenced.destinationId
-            : referenced.sourceChannelId === link.threadId
-              ? referenced.sourceId
-              : undefined
-          : undefined;
+      const replyId = yield* this.replyId(message, link.threadId, link.threadId);
       const body = yield* this.threadPayload(message, link.threadId, replyId);
       yield* transport.edit(link.destinationId, { source: message, ...body });
       return;

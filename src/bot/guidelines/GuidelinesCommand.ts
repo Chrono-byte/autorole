@@ -15,7 +15,7 @@ import {
   replyEphemeral,
 } from "@autorole/discord-framework";
 import { teamDefinitions } from "./TeamGate";
-import { rosterGuildId } from "../commands/syncRoster";
+import { guildId as overwatchGuildId } from "../../config/discord";
 import { agreementPrefix as prefix } from "./AgreementPanel";
 import { type GuidelinesCoordinator } from "./GuidelinesCoordinator";
 
@@ -62,7 +62,7 @@ export const guidelinesCommands = new CommandCatalog<GuidelinesCoordinator>([
       Effect.gen(function* () {
         yield* deferEphemeral(interaction);
         const guild = interaction.guild;
-        if (!guild || guild.id !== rosterGuildId)
+        if (!guild || guild.id !== overwatchGuildId)
           return yield* editResponse(
             interaction,
             "Agreement renewal is only available in the Overwatch server.",
@@ -120,7 +120,7 @@ export const guidelinesCommands = new CommandCatalog<GuidelinesCoordinator>([
           );
         }
         if (!active) return yield* editResponse(interaction, "No active agreement period.");
-        const mapping = guild.id === rosterGuildId ? teamDefinitions : null;
+        const mapping = guild.id === overwatchGuildId ? teamDefinitions : null;
         if (!mapping)
           return yield* editResponse(
             interaction,

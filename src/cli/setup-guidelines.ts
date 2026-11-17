@@ -10,7 +10,7 @@ import {
 import { readConfiguration } from "../config/Configuration";
 import { runMain } from "../runMain";
 import { ConfigurationError } from "../errors";
-import { rosterGuildId } from "../bot/commands/syncRoster";
+import { guildId } from "../config/discord";
 import {
   teamDefinitions,
   staffRoleIds,
@@ -27,7 +27,7 @@ export const setupGuidelines = Effect.fn("Guidelines.setup")(function* (
     yield* validateTeamGate(guild, yield* resolveTeamRoles(guild));
     return { rolesCreated: 0, assignments: 0, overwrites: 0 };
   }
-  if (guild.id !== rosterGuildId)
+  if (guild.id !== guildId)
     return yield* new ConfigurationError({
       message: "Guidelines setup is only available in the Overwatch server.",
     });
@@ -197,7 +197,7 @@ if (import.meta.main) {
           Events.ClientReady,
           () =>
             Effect.gen(function* () {
-              const guild = yield* discordRequest(() => client.guilds.fetch(rosterGuildId));
+              const guild = yield* discordRequest(() => client.guilds.fetch(guildId));
               const result = yield* setupGuidelines(guild, args[0] === "--check");
               yield* Effect.sync(() => process.stdout.write(`${JSON.stringify(result)}\n`));
               yield* Deferred.succeed(done, undefined);

@@ -1,3 +1,4 @@
+import { guildId } from "../src/config/discord";
 import { expect, test } from "bun:test";
 import {
   Collection,
@@ -8,12 +9,7 @@ import {
 } from "discord.js";
 import { refreshRoster } from "../src/bot/AutomaticRoster";
 import { Effect } from "effect";
-import {
-  playerRoleId,
-  rosterGuildId,
-  syncRoster,
-  teamRoleIds,
-} from "../src/bot/commands/syncRoster";
+import { playerRoleId, syncRoster, teamRoleIds } from "../src/bot/commands/syncRoster";
 
 function fixture() {
   const writes: string[] = [];
@@ -47,7 +43,7 @@ function fixture() {
     };
   }
   const guild = {
-    id: rosterGuildId,
+    id: guildId,
     ownerId: "owner",
     roles: { fetch: async () => roleList },
     members: {
@@ -101,7 +97,7 @@ test("periodic roster health reports incomplete updates and recovers on a later 
   f.roster.set("good", f.member("good", [teamRoleIds[0]]));
   f.failWrite("fail");
   const client = {
-    guilds: { cache: new Collection([[rosterGuildId, f.guild]]) },
+    guilds: { cache: new Collection([[guildId, f.guild]]) },
   } as unknown as Client;
   await expect(Effect.runPromise(refreshRoster(client))).rejects.toThrow("1 member updates failed");
   expect(f.writes).toEqual(["add:good"]);
@@ -165,7 +161,7 @@ test("the roster command enforces member and bot permissions before reading memb
   };
   const interaction = {
     commandName: "sync-roster",
-    guildId: rosterGuildId,
+    guildId: guildId,
     guild: f.guild,
     memberPermissions: new PermissionsBitField(PermissionFlagsBits.ManageGuild),
     appPermissions: new PermissionsBitField(PermissionFlagsBits.ManageRoles),

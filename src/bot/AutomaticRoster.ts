@@ -1,18 +1,13 @@
+import { guildId } from "../config/discord";
 import { type Client, type GuildMember, type PartialGuildMember } from "discord.js";
 import { Effect } from "effect";
-import {
-  playerRoleId,
-  rosterGuildId,
-  syncRoster,
-  syncRosterMember,
-  teamRoleIds,
-} from "./commands/syncRoster";
+import { playerRoleId, syncRoster, syncRosterMember, teamRoleIds } from "./commands/syncRoster";
 
 const trackedRoles = [playerRoleId, ...teamRoleIds];
 
 export function rosterChanged(before: GuildMember | PartialGuildMember, after: GuildMember) {
   return (
-    after.guild.id === rosterGuildId &&
+    after.guild.id === guildId &&
     trackedRoles.some((id) => before.roles.cache.has(id) !== after.roles.cache.has(id))
   );
 }
@@ -22,7 +17,7 @@ export function automaticRosterMember(member: GuildMember) {
 }
 
 export const refreshRoster = Effect.fn("Roster.refresh")(function* (client: Client) {
-  const guild = client.guilds.cache.get(rosterGuildId);
+  const guild = client.guilds.cache.get(guildId);
   if (!guild) return;
   const result = yield* syncRoster(guild);
   if (result.failed)

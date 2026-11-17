@@ -11,7 +11,7 @@ import {
   validateTeamGate,
   type TeamRoles,
 } from "./TeamGate";
-import { rosterGuildId } from "../commands/syncRoster";
+import { guildId as overwatchGuildId } from "../../config/discord";
 
 export class GuidelinesCoordinator {
   private readonly accessLock = Semaphore.makeUnsafe(1);
@@ -77,7 +77,7 @@ export class GuidelinesCoordinator {
     this: GuidelinesCoordinator,
     client: Client,
   ) {
-    const guild = client.guilds.cache.get(rosterGuildId);
+    const guild = client.guilds.cache.get(overwatchGuildId);
     if (!guild) return;
     const result = yield* this.reconcile(guild);
     if (result.failed.length)

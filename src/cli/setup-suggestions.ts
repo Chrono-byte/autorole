@@ -1,3 +1,4 @@
+import { guildId, officerCategoryId, officerRoleId } from "../config/discord";
 import {
   ApplicationFlagsBitField,
   ChannelType,
@@ -14,7 +15,6 @@ import { ConfigurationError } from "../errors";
 import { runMain } from "../runMain";
 import { privateSuggestionOverwrites } from "../bot/suggestions/privacy";
 import {
-  suggestionGuildId,
   suggestionInboxChannelId,
   suggestionOpenId,
   suggestionPanel,
@@ -53,7 +53,6 @@ const parseChannel = Schema.decodeUnknownEffect(channel);
 const parseApplication = Schema.decodeUnknownEffect(application);
 const parseRoles = Schema.decodeUnknownEffect(Schema.Array(role));
 const parseMessages = Schema.decodeUnknownEffect(Schema.Array(message));
-const officerCategoryId = "1566109875535355994";
 
 export const setupSuggestions = Effect.fn("Suggestions.setup")(function* (
   config: Configuration,
@@ -88,22 +87,22 @@ export const setupSuggestions = Effect.fn("Suggestions.setup")(function* (
   const panelChannel = yield* discordRequest(() =>
     rest.get(Routes.channel(suggestionPanelChannelId)),
   ).pipe(Effect.flatMap(parseChannel));
-  const roles = yield* discordRequest(() => rest.get(Routes.guildRoles(suggestionGuildId))).pipe(
+  const roles = yield* discordRequest(() => rest.get(Routes.guildRoles(guildId))).pipe(
     Effect.flatMap(parseRoles),
   );
-  const everyoneRole = roles.find((item) => item.id === suggestionGuildId);
-  const officerRole = roles.find((item) => item.id === "1564387083642998897");
+  const everyoneRole = roles.find((item) => item.id === guildId);
+  const officerRole = roles.find((item) => item.id === officerRoleId);
   const validPrivacy = (c: typeof inbox) =>
     privateSuggestionOverwrites(
       c.permission_overwrites.map((o) => ({ ...o, allow: BigInt(o.allow), deny: BigInt(o.deny) })),
     );
   if (
-    inbox.guild_id !== suggestionGuildId ||
+    inbox.guild_id !== guildId ||
     inbox.type !== ChannelType.GuildText ||
     inbox.parent_id !== officerCategoryId ||
-    parent.guild_id !== suggestionGuildId ||
+    parent.guild_id !== guildId ||
     parent.type !== ChannelType.GuildCategory ||
-    panelChannel.guild_id !== suggestionGuildId ||
+    panelChannel.guild_id !== guildId ||
     panelChannel.type !== ChannelType.GuildText ||
     !everyoneRole ||
     !officerRole ||
@@ -117,7 +116,7 @@ export const setupSuggestions = Effect.fn("Suggestions.setup")(function* (
 
   let officerPermissions = BigInt(everyoneRole.permissions) | BigInt(officerRole.permissions);
   if ((officerPermissions & PermissionFlagsBits.Administrator) === 0n) {
-    for (const id of [suggestionGuildId, officerRole.id]) {
+    for (const id of [guildId, officerRole.id]) {
       const entry = inbox.permission_overwrites.find((item) => item.id === id && item.type === 0);
       if (entry)
         officerPermissions = (officerPermissions & ~BigInt(entry.deny)) | BigInt(entry.allow);
@@ -139,9 +138,8 @@ export const setupSuggestions = Effect.fn("Suggestions.setup")(function* (
     PermissionFlagsBits.CreatePrivateThreads |
     PermissionFlagsBits.SendMessagesInThreads;
   const trustedPosters = new Set([
-    suggestionGuildId,
     "1557133002285387857",
-    "1564387083642998897",
+    officerRoleId,
     "1415400507006124101",
     "1565937863802228818",
   ]);
@@ -198,13 +196,11 @@ export const setupSuggestions = Effect.fn("Suggestions.setup")(function* (
       rest.post(Routes.channelMessages(suggestionPanelChannelId), { body }),
     );
 
-  const prior = panelChannel.permission_overwrites.find(
-    (o) => o.id === suggestionGuildId && o.type === 0,
-  );
+  const prior = panelChannel.permission_overwrites.find((o) => o.id === guildId && o.type === 0);
   const allow = BigInt(prior?.allow ?? "0") & ~blocked;
   const deny = BigInt(prior?.deny ?? "0") | blocked;
   yield* discordRequest(() =>
-    rest.put(Routes.channelPermission(suggestionPanelChannelId, suggestionGuildId), {
+    rest.put(Routes.channelPermission(suggestionPanelChannelId, guildId), {
       body: { type: 0, allow: allow.toString(), deny: deny.toString() },
       reason: "Use private suggestion conversations",
     }),
@@ -212,9 +208,7 @@ export const setupSuggestions = Effect.fn("Suggestions.setup")(function* (
   const verified = yield* discordRequest(() =>
     rest.get(Routes.channel(suggestionPanelChannelId)),
   ).pipe(Effect.flatMap(parseChannel));
-  const updated = verified.permission_overwrites.find(
-    (o) => o.id === suggestionGuildId && o.type === 0,
-  );
+  const updated = verified.permission_overwrites.find((o) => o.id === guildId && o.type === 0);
   if (!updated || BigInt(updated.allow) !== allow || BigInt(updated.deny) !== deny)
     return yield* new ConfigurationError({
       message: "Could not verify suggestions channel permissions.",

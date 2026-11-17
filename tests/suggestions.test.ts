@@ -1,3 +1,4 @@
+import { guildId } from "../src/config/discord";
 import { expect, test } from "bun:test";
 import {
   ChannelType,
@@ -17,7 +18,6 @@ import { join } from "node:path";
 import { SuggestionStore } from "../src/bot/suggestions/SuggestionStore";
 import {
   Suggestions,
-  suggestionGuildId,
   suggestionInboxChannelId,
   suggestionPanelChannelId,
 } from "../src/bot/suggestions/Suggestions";
@@ -54,15 +54,15 @@ function fixture() {
   let threadAvailable = true;
   let failThreadSend = false;
   const everyone = {
-    id: suggestionGuildId,
+    id: guildId,
     type: 0,
     allow: new PermissionsBitField(0n),
     deny: new PermissionsBitField(F.ViewChannel),
   };
-  const permissions = new Collection([[suggestionGuildId, everyone]]);
+  const permissions = new Collection([[guildId, everyone]]);
   const parent = { type: ChannelType.GuildCategory, permissionOverwrites: { cache: permissions } };
   const guild = {
-    id: suggestionGuildId,
+    id: guildId,
     channels: { fetch: async () => parent },
     roles: {
       fetch: async () => {},
@@ -74,7 +74,7 @@ function fixture() {
     id: threadId,
     parentId: suggestionInboxChannelId,
     ownerId: "bot",
-    guildId: suggestionGuildId,
+    guildId: guildId,
     isTextBased: () => true,
     isSendable: () => true,
     messages: {
@@ -190,7 +190,7 @@ function fixture() {
   const interaction = (customId: string, dmChannel = false, moderator = true) =>
     ({
       customId,
-      guildId: dmChannel ? null : suggestionGuildId,
+      guildId: dmChannel ? null : guildId,
       channelId: dmChannel
         ? "dm"
         : customId === "suggestions:open" || customId === "suggestions:new"
@@ -220,7 +220,7 @@ function fixture() {
             displayAvatarURL: () => "https://cdn.discordapp.com/officer.png",
           },
       webhookId: null,
-      guildId: fromUser ? null : suggestionGuildId,
+      guildId: fromUser ? null : guildId,
       channelId: fromUser ? "dm" : threadId,
       channel: fromUser
         ? { type: ChannelType.DM }
@@ -539,7 +539,7 @@ test("relayed replies target the corresponding message in both directions and id
         reply.reference = {
           messageId: copyId,
           channelId: threadId,
-          guildId: suggestionGuildId,
+          guildId: guildId,
           type: MessageReferenceType.Default,
         };
         yield* service.message(reply);
@@ -571,7 +571,7 @@ test("relayed replies target the corresponding message in both directions and id
               data: {
                 author: {
                   name: "Reply to Officer Name",
-                  url: `https://discord.com/channels/${suggestionGuildId}/${threadId}/${reply.id}`,
+                  url: `https://discord.com/channels/${guildId}/${threadId}/${reply.id}`,
                 },
                 description: "Officer reply",
               },
@@ -643,7 +643,7 @@ test("long suggestions preserve their full text, attachments, and replies on sen
         reply.reference = {
           messageId: copyId,
           channelId: threadId,
-          guildId: suggestionGuildId,
+          guildId: guildId,
           type: MessageReferenceType.Default,
         };
         yield* service.message(reply);
@@ -708,7 +708,7 @@ test(
             reply.reference = {
               channelId: threadId,
               messageId: copyId,
-              guildId: suggestionGuildId,
+              guildId: guildId,
               type: MessageReferenceType.Default,
             };
             yield* service.message(reply);

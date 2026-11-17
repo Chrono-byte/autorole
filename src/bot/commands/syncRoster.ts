@@ -3,7 +3,7 @@ import { Effect, Result } from "effect";
 import { discordRequest, forEachGuildMember, roleAssignability } from "@autorole/discord-framework";
 import { ConfigurationError } from "../../errors";
 
-export const rosterGuildId = "1415400507006124093";
+import { guildId } from "../../config/discord";
 export const playerRoleId = "1424545955826634915";
 export const teamRoleIds = [
   "1415400507006124095",
@@ -12,7 +12,7 @@ export const teamRoleIds = [
 ] as const;
 
 const validateRoster = Effect.fn("Roster.validate")(function* (guild: Guild) {
-  if (guild.id !== rosterGuildId)
+  if (guild.id !== guildId)
     return yield* new ConfigurationError({
       message: "This command is only available in Overwatch Esports at IUI.",
     });
@@ -34,12 +34,11 @@ const validateRoster = Effect.fn("Roster.validate")(function* (guild: Guild) {
   return playerRole;
 });
 
-export const syncRosterMember = Effect.fn("Roster.syncMember")(function* (
+const updateRosterMember = Effect.fn("Roster.updateMember")(function* (
   guild: Guild,
   memberId: string,
-  reason = "Automatic roster sync",
+  reason: string,
 ) {
-  yield* validateRoster(guild);
   const member = yield* discordRequest(() =>
     guild.members.fetch({ user: memberId, force: true, cache: false }),
   );
@@ -54,6 +53,15 @@ export const syncRosterMember = Effect.fn("Roster.syncMember")(function* (
   return "removed" as const;
 });
 
+export const syncRosterMember = Effect.fn("Roster.syncMember")(function* (
+  guild: Guild,
+  memberId: string,
+  reason = "Automatic roster sync",
+) {
+  yield* validateRoster(guild);
+  return yield* updateRosterMember(guild, memberId, reason);
+});
+
 export const syncRoster = Effect.fn("Roster.sync")(function* (guild: Guild, actorId?: string) {
   const playerRole = yield* validateRoster(guild);
   if (actorId && actorId !== guild.ownerId) {
@@ -62,14 +70,14 @@ export const syncRoster = Effect.fn("Roster.sync")(function* (guild: Guild, acto
       return yield* new ConfigurationError({ message: "Your highest role must be above Player." });
   }
 
-  const changes: { id: string; add: boolean }[] = [];
+  const changes: string[] = [];
   yield* forEachGuildMember(
     guild,
     (member) =>
       Effect.sync(() => {
         const hasPlayer = member.roles.cache.has(playerRoleId);
         const hasTeam = teamRoleIds.some((id) => member.roles.cache.has(id));
-        if (hasPlayer !== hasTeam) changes.push({ id: member.id, add: hasTeam });
+        if (hasPlayer !== hasTeam) changes.push(member.id);
       }),
     new ConfigurationError({
       message: "Could not read the complete member list; no changes were made.",
@@ -81,30 +89,11 @@ export const syncRoster = Effect.fn("Roster.sync")(function* (guild: Guild, acto
   let failed = 0;
   for (const change of changes) {
     const result = yield* Effect.result(
-      Effect.gen(function* () {
-        const member = yield* discordRequest(() =>
-          guild.members.fetch({ user: change.id, force: true, cache: false }),
-        );
-        const hasPlayer = member.roles.cache.has(playerRoleId);
-        const hasTeam = teamRoleIds.some((id) => member.roles.cache.has(id));
-        if (hasPlayer === hasTeam) return "unchanged" as const;
-        if (hasTeam) {
-          yield* discordRequest(() =>
-            member.roles.add(
-              playerRoleId,
-              actorId ? `Roster sync by ${actorId}` : "Automatic roster sync",
-            ),
-          );
-          return "added" as const;
-        }
-        yield* discordRequest(() =>
-          member.roles.remove(
-            playerRoleId,
-            actorId ? `Roster sync by ${actorId}` : "Automatic roster sync",
-          ),
-        );
-        return "removed" as const;
-      }),
+      updateRosterMember(
+        guild,
+        change,
+        actorId ? `Roster sync by ${actorId}` : "Automatic roster sync",
+      ),
     );
     if (Result.isFailure(result)) failed++;
     else if (result.success === "added") added++;
