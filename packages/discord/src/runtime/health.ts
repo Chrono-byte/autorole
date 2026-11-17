@@ -4,7 +4,7 @@ import { type BackgroundTask } from "./background";
 export type BackgroundTaskFailure = {
   readonly at: number;
   readonly message: string;
-  readonly kind: "failure" | "defect";
+  readonly kind: "failure" | "defect" | "timeout";
 };
 
 type TaskHistory = {
@@ -50,6 +50,15 @@ export const makeBackgroundHealth = Effect.fn("Discord.backgroundHealth")(functi
       const entries = yield* Effect.forEach(tasks, (task) =>
         Effect.gen(function* () {
           const interval = yield* Effect.sync(() => Duration.fromInputUnsafe(task.interval));
+          const timeout = yield* Effect.sync(() => {
+            const value = Duration.fromInputUnsafe(task.timeout);
+            const millis = Duration.toMillis(value);
+            if (!Number.isFinite(millis) || millis <= 0)
+              throw new RangeError(
+                `Background task ${task.name} requires a positive finite timeout.`,
+              );
+            return value;
+          });
           const state = yield* Ref.make<BackgroundTaskHealth>({
             name: task.name,
             status: "pending",
@@ -57,7 +66,7 @@ export const makeBackgroundHealth = Effect.fn("Discord.backgroundHealth")(functi
             lastFailure: null,
             consecutiveFailures: 0,
           });
-          return { task, interval, state };
+          return { task, interval, timeout, state };
         }),
       );
       yield* Ref.set(

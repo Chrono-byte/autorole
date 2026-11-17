@@ -12,6 +12,7 @@ export function presenceTask(options: {
   return {
     name: "presence",
     interval: options.interval,
+    timeout: "10 seconds",
     onFailure: "continue",
     run: (client: Client<true>) =>
       Effect.sync(() => {

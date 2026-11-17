@@ -717,16 +717,37 @@ test("autorole module handles a join and removes its listeners on scope exit", a
             ],
           );
           expect(
-            module.background?.map(({ name, interval, onFailure }) => ({
+            module.background?.map(({ name, interval, timeout, onFailure }) => ({
               name,
               interval,
+              timeout,
               onFailure,
             })),
           ).toEqual([
-            { name: "role-assignments", interval: "1 minute", onFailure: "continue" },
-            { name: "roster-sync", interval: "5 minutes", onFailure: "continue" },
-            { name: "member-counter", interval: "10 minutes", onFailure: "continue" },
-            { name: "guidelines-gate", interval: "1 minute", onFailure: "continue" },
+            {
+              name: "role-assignments",
+              interval: "1 minute",
+              timeout: "5 minutes",
+              onFailure: "continue",
+            },
+            {
+              name: "roster-sync",
+              interval: "5 minutes",
+              timeout: "10 minutes",
+              onFailure: "continue",
+            },
+            {
+              name: "member-counter",
+              interval: "10 minutes",
+              timeout: "5 minutes",
+              onFailure: "continue",
+            },
+            {
+              name: "guidelines-gate",
+              interval: "1 minute",
+              timeout: "10 minutes",
+              onFailure: "continue",
+            },
           ]);
           yield* install(fixture.client, module.commands, module.events, () => Effect.void);
           fixture.client.emit(Events.GuildMemberAdd, member);

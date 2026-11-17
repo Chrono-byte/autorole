@@ -92,6 +92,7 @@ for (const failure of ["typed", "defect", "factory"] as const) {
         {
           name: "recovering",
           interval: "1 minute",
+          timeout: "5 minutes",
           onFailure: "continue",
           run: () => {
             attempts++;
@@ -131,6 +132,7 @@ test("background passes start once at readiness, wait after completion, and stop
       {
         name: "slow",
         interval: "1 minute",
+        timeout: "5 minutes",
         onFailure: "continue",
         run: () =>
           Effect.gen(function* () {
@@ -148,6 +150,7 @@ test("background passes start once at readiness, wait after completion, and stop
       {
         name: "healthy",
         interval: "10 seconds",
+        timeout: "5 minutes",
         onFailure: "continue",
         run: () =>
           Effect.sync(() => {
@@ -194,6 +197,7 @@ test("background failure policy continues or stops one task and reports its name
     {
       name: "continuing",
       interval: "1 minute",
+      timeout: "5 minutes",
       onFailure: "continue",
       run: () =>
         Effect.suspend(() => {
@@ -204,6 +208,7 @@ test("background failure policy continues or stops one task and reports its name
     {
       name: "stopping",
       interval: "1 minute",
+      timeout: "5 minutes",
       onFailure: "stop",
       run: () =>
         Effect.suspend(() => {
@@ -214,6 +219,7 @@ test("background failure policy continues or stops one task and reports its name
     {
       name: "defective",
       interval: "1 minute",
+      timeout: "5 minutes",
       onFailure: "continue",
       run: () =>
         Effect.sync(() => {
@@ -224,6 +230,7 @@ test("background failure policy continues or stops one task and reports its name
     {
       name: "healthy",
       interval: "1 minute",
+      timeout: "5 minutes",
       onFailure: "continue",
       run: () =>
         Effect.sync(() => {
@@ -277,6 +284,7 @@ test("duplicate background names are rejected across modules", () => {
       {
         name: "duplicate",
         interval: "1 minute",
+        timeout: "5 minutes",
         onFailure: "continue",
         run: () => Effect.void,
       } satisfies BackgroundTask,
@@ -293,6 +301,7 @@ test("task health retains failure history, resets failures after recovery, and r
       {
         name: "recovering",
         interval: "1 minute",
+        timeout: "5 minutes",
         onFailure: "continue",
         run: () =>
           Effect.suspend(() => {
@@ -373,6 +382,7 @@ test("failed passes release scoped resources before retry and active passes rele
       {
         name: "resources",
         interval: "1 minute",
+        timeout: "5 minutes",
         onFailure: "continue",
         run: () =>
           Effect.gen(function* () {
@@ -424,6 +434,7 @@ test("a stopped failure remains visible and does not retry", async () => {
       {
         name: "terminal",
         interval: "1 minute",
+        timeout: "5 minutes",
         onFailure: "stop",
         run: () =>
           Effect.suspend(() => {
@@ -499,6 +510,7 @@ test("a reporting failure cannot prevent task recovery", async () => {
       {
         name: "reporting",
         interval: "1 minute",
+        timeout: "5 minutes",
         onFailure: "continue",
         run: () =>
           Effect.suspend(() => {
@@ -533,6 +545,7 @@ test("the recorded retry time includes time spent reporting the failure", async 
       {
         name: "slow-report",
         interval: "1 minute",
+        timeout: "5 minutes",
         onFailure: "continue",
         run: () =>
           Effect.suspend(() => {
@@ -558,3 +571,324 @@ test("the recorded retry time includes time spent reporting the failure", async 
     () => Effect.sleep("30 seconds"),
   );
 });
+
+test("task-specific deadlines release resources, record timeouts, and retry independently", async () => {
+  let attempts = 0;
+  let active = 0;
+  let released = 0;
+  const errors: string[] = [];
+  await withTasks(
+    [
+      {
+        name: "short",
+        interval: "1 minute",
+        timeout: "30 seconds",
+        onFailure: "continue",
+        run: () =>
+          Effect.gen(function* () {
+            attempts++;
+            yield* Effect.acquireRelease(
+              Effect.sync(() => {
+                active++;
+              }),
+              () =>
+                Effect.sync(() => {
+                  active--;
+                  released++;
+                }),
+            );
+            if (attempts === 1) yield* Effect.never;
+          }),
+      },
+      {
+        name: "long",
+        interval: "1 minute",
+        timeout: "90 seconds",
+        onFailure: "continue",
+        run: () => Effect.never,
+      },
+    ],
+    (stop, health) =>
+      Effect.gen(function* () {
+        yield* TestClock.adjust("29 seconds");
+        expect([active, released, attempts]).toEqual([1, 0, 1]);
+        expect(errors).toEqual([]);
+        yield* TestClock.adjust("1 second");
+        expect([active, released, attempts]).toEqual([0, 1, 1]);
+        expect(yield* health.snapshot).toEqual([
+          {
+            name: "short",
+            status: "retrying",
+            nextRunAt: 90_000,
+            lastSuccessAt: null,
+            lastFailure: {
+              at: 30_000,
+              kind: "timeout",
+              message: "short exceeded its 30s deadline.",
+            },
+            consecutiveFailures: 1,
+          },
+          {
+            name: "long",
+            status: "running",
+            startedAt: 0,
+            lastSuccessAt: null,
+            lastFailure: null,
+            consecutiveFailures: 0,
+          },
+        ]);
+        yield* TestClock.adjust("1 minute");
+        expect([active, released, attempts]).toEqual([0, 2, 2]);
+        expect((yield* health.snapshot)[0]).toMatchObject({
+          status: "healthy",
+          lastSuccessAt: 90_000,
+          consecutiveFailures: 0,
+        });
+        expect((yield* health.snapshot)[1]).toMatchObject({
+          status: "retrying",
+          lastFailure: { at: 90_000, kind: "timeout" },
+        });
+        expect(errors).toEqual([
+          "short exceeded its 30s deadline.",
+          "long exceeded its 1m 30s deadline.",
+        ]);
+        yield* stop;
+        yield* TestClock.adjust("10 minutes");
+        expect(attempts).toBe(2);
+      }),
+    (error) =>
+      Effect.sync(() => {
+        errors.push(error.message);
+      }),
+  );
+});
+
+test("a hung failure reporter is interrupted so the task can retry", async () => {
+  let attempts = 0;
+  let reporterInterrupted = false;
+  const logs: unknown[] = [];
+  await withTasks(
+    [
+      {
+        name: "hung-report",
+        interval: "1 minute",
+        timeout: "2 minutes",
+        onFailure: "continue",
+        run: () =>
+          Effect.suspend(() => {
+            attempts++;
+            return attempts === 1 ? Effect.fail(new Error("temporary")) : Effect.void;
+          }),
+      },
+    ],
+    (_stop, health) =>
+      Effect.gen(function* () {
+        yield* TestClock.adjust("30 seconds");
+        expect(reporterInterrupted).toBe(true);
+        expect((yield* health.snapshot)[0]).toMatchObject({
+          status: "retrying",
+          nextRunAt: 90_000,
+        });
+        yield* TestClock.adjust("1 minute");
+        expect(attempts).toBe(2);
+        expect((yield* health.snapshot)[0]?.status).toBe("healthy");
+        expect(logs).toHaveLength(2);
+      }),
+    () =>
+      Effect.never.pipe(
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
+            reporterInterrupted = true;
+          }),
+        ),
+      ),
+    { logs },
+  );
+});
+
+test("timeout recovery waits for slow cleanup before scheduling another pass", async () => {
+  let attempts = 0;
+  let active = 0;
+  await withTasks(
+    [
+      {
+        name: "cleanup",
+        interval: "1 minute",
+        timeout: "30 seconds",
+        onFailure: "continue",
+        run: () =>
+          Effect.gen(function* () {
+            attempts++;
+            if (attempts > 1) return;
+            yield* Effect.acquireRelease(
+              Effect.sync(() => {
+                active++;
+              }),
+              () =>
+                Effect.sleep("2 minutes").pipe(
+                  Effect.andThen(
+                    Effect.sync(() => {
+                      active--;
+                    }),
+                  ),
+                ),
+            );
+            yield* Effect.never;
+          }),
+      },
+    ],
+    (_stop, health) =>
+      Effect.gen(function* () {
+        yield* TestClock.adjust("90 seconds");
+        expect([attempts, active]).toEqual([1, 1]);
+        expect((yield* health.snapshot)[0]?.status).toBe("running");
+        yield* TestClock.adjust("1 minute");
+        expect([attempts, active]).toEqual([1, 0]);
+        expect((yield* health.snapshot)[0]).toMatchObject({
+          status: "retrying",
+          nextRunAt: 210_000,
+          lastFailure: { kind: "timeout", at: 150_000 },
+        });
+        yield* TestClock.adjust("1 minute");
+        expect(attempts).toBe(2);
+        expect((yield* health.snapshot)[0]).toMatchObject({
+          status: "healthy",
+          lastSuccessAt: 210_000,
+          consecutiveFailures: 0,
+        });
+      }),
+  );
+});
+
+test("shutdown cancels an active deadline without recording a timeout or retrying", async () => {
+  let attempts = 0;
+  let released = 0;
+  const errors: string[] = [];
+  await withTasks(
+    [
+      {
+        name: "cancelled",
+        interval: "1 minute",
+        timeout: "30 seconds",
+        onFailure: "continue",
+        run: () =>
+          Effect.gen(function* () {
+            attempts++;
+            yield* Effect.acquireRelease(Effect.void, () =>
+              Effect.sync(() => {
+                released++;
+              }),
+            );
+            yield* Effect.never;
+          }),
+      },
+    ],
+    (stop, health) =>
+      Effect.gen(function* () {
+        yield* TestClock.adjust("10 seconds");
+        yield* stop;
+        expect(released).toBe(1);
+        expect(yield* health.snapshot).toEqual([
+          {
+            name: "cancelled",
+            status: "stopped",
+            reason: "shutdown",
+            lastSuccessAt: null,
+            lastFailure: null,
+            consecutiveFailures: 0,
+          },
+        ]);
+        yield* TestClock.adjust("10 minutes");
+        expect(attempts).toBe(1);
+        expect(errors).toEqual([]);
+      }),
+    (error) =>
+      Effect.sync(() => {
+        errors.push(error.message);
+      }),
+  );
+});
+
+test("a task configured to stop does not retry after its deadline", async () => {
+  let attempts = 0;
+  await withTasks(
+    [
+      {
+        name: "stop-timeout",
+        interval: "1 minute",
+        timeout: "30 seconds",
+        onFailure: "stop",
+        run: () =>
+          Effect.sync(() => {
+            attempts++;
+          }).pipe(Effect.andThen(Effect.never)),
+      },
+    ],
+    (stop, health) =>
+      Effect.gen(function* () {
+        yield* TestClock.adjust("30 seconds");
+        expect(yield* health.snapshot).toEqual([
+          {
+            name: "stop-timeout",
+            status: "stopped",
+            reason: "failure",
+            lastSuccessAt: null,
+            lastFailure: {
+              at: 30_000,
+              kind: "timeout",
+              message: "stop-timeout exceeded its 30s deadline.",
+            },
+            consecutiveFailures: 1,
+          },
+        ]);
+        yield* TestClock.adjust("10 minutes");
+        expect(attempts).toBe(1);
+        yield* stop;
+        expect((yield* health.snapshot)[0]).toMatchObject({ status: "stopped", reason: "failure" });
+      }),
+  );
+});
+
+for (const timeout of [0, -1, Number.POSITIVE_INFINITY, Number.NaN]) {
+  test(`invalid task deadline ${timeout} fails startup before login`, async () => {
+    const login = spyOn(Client.prototype, "login").mockRejectedValue(new Error("Unexpected login"));
+    const destroy = spyOn(Client.prototype, "destroy").mockResolvedValue(undefined);
+    try {
+      await expect(
+        Effect.runPromise(
+          Effect.scoped(
+            runBot({
+              token: "fixture",
+              client: { intents: [] },
+              modules: [
+                () =>
+                  Effect.succeed({
+                    commands: new CommandRegistry([]),
+                    events: [],
+                    background: [
+                      {
+                        name: "invalid",
+                        interval: "1 minute",
+                        timeout,
+                        onFailure: "continue",
+                        run: () => Effect.void,
+                      },
+                    ],
+                  }),
+              ],
+              ready: () => Effect.void,
+              readyFailed: () => Effect.void,
+              reportHandler: () => Effect.void,
+              reportDiscord: () => Effect.void,
+            }),
+          ),
+        ),
+      ).rejects.toThrow();
+      expect(login).not.toHaveBeenCalled();
+      expect(destroy).toHaveBeenCalledTimes(1);
+    } finally {
+      login.mockRestore();
+      destroy.mockRestore();
+    }
+  });
+}

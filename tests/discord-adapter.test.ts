@@ -368,6 +368,7 @@ test("bot runner starts module before readiness and shuts down on readiness fail
                     {
                       name: "long-running",
                       interval: "1 minute",
+                      timeout: "5 minutes",
                       onFailure: "stop",
                       run: (readyClient: import("discord.js").Client<true>) =>
                         Effect.sync(() => {
@@ -385,6 +386,7 @@ test("bot runner starts module before readiness and shuts down on readiness fail
                     {
                       name: "failing",
                       interval: "1 minute",
+                      timeout: "5 minutes",
                       onFailure: "stop",
                       run: () => Effect.fail(new Error("background failed")),
                     },

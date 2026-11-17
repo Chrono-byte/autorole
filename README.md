@@ -60,6 +60,8 @@ Run `/bot-status` with Manage Server permission to inspect background task healt
 
 Background tasks, including presence rotation, retry failures on their configured intervals. Failed passes release temporary resources before retrying. A successful retry marks the task healthy, resets its consecutive failure count, and logs `background_task_recovered`; the last failure remains visible for diagnosis. Health snapshots reset on process restart. Discord and SQLite state are read again by the next reconciliation pass.
 
+Passes have deadlines of five minutes for assignments and member counters, ten minutes for roster and guidelines synchronization, and ten seconds for presence. A deadline interrupts the pass, records a `timeout` failure in `/bot-status`, and waits for cleanup before scheduling its retry. Shutdown cancels active deadlines without recording a timeout. These limits do not roll back Discord changes already made by a pass.
+
 ```sh
 bun run check                         # Types, lint, formatting, and tests
 bun run format                        # Apply lint fixes and formatting

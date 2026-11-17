@@ -9,7 +9,7 @@ export {
 } from "./src/commands/registry";
 export { buttonEvent, event, install, type EventHandler } from "./src/runtime/events";
 export { composeModules, runBot, type BotModule, type BotModuleFactory } from "./src/runtime/bot";
-export { type BackgroundTask } from "./src/runtime/background";
+export { type BackgroundTask, BackgroundTaskTimeout } from "./src/runtime/background";
 export {
   BackgroundHealth,
   type BackgroundTaskHealth,

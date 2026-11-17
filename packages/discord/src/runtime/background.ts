@@ -1,24 +1,37 @@
 import { type Client } from "discord.js";
-import { Cause, DateTime, Duration, Effect, Exit, Ref, type Scope } from "effect";
+import { Cause, DateTime, Duration, Effect, Exit, Ref, Schema, type Scope } from "effect";
 import { type Report } from "./events";
 import { taskHistory, type BackgroundTaskHealth } from "./health";
 
 export type BackgroundTask = {
   name: string;
   interval: Duration.Input;
+  timeout: Duration.Input;
   onFailure: "continue" | "stop";
   run: (client: Client<true>) => Effect.Effect<void, Error, Scope.Scope>;
 };
+
+export class BackgroundTaskTimeout extends Schema.TaggedError<BackgroundTaskTimeout>()(
+  "BackgroundTaskTimeout",
+  {
+    task: Schema.String,
+    timeoutMs: Schema.Number,
+    message: Schema.String,
+  },
+) {}
+
+const reportingTimeout = Duration.seconds(30);
 
 export const runBackgroundTask = Effect.fn("Discord.backgroundTask")(
   function* (options: {
     task: BackgroundTask;
     interval: Duration.Duration;
+    timeout: Duration.Duration;
     state: Ref.Ref<BackgroundTaskHealth>;
     client: Client<true>;
     report: Report;
   }) {
-    const { task, interval, state, client, report } = options;
+    const { task, interval, timeout, state, client, report } = options;
     const delay = Duration.toMillis(interval);
     while (true) {
       const startedAt = DateTime.toEpochMillis(yield* DateTime.now);
@@ -28,7 +41,20 @@ export const runBackgroundTask = Effect.fn("Discord.backgroundTask")(
         startedAt,
       }));
       const result = yield* Effect.exit(
-        Effect.scoped(Effect.suspend(() => task.run(client))).pipe(Effect.withSpan(task.name)),
+        Effect.scoped(Effect.suspend(() => task.run(client))).pipe(
+          Effect.timeoutOrElse({
+            duration: timeout,
+            orElse: () =>
+              Effect.fail(
+                new BackgroundTaskTimeout({
+                  task: task.name,
+                  timeoutMs: Duration.toMillis(timeout),
+                  message: `${task.name} exceeded its ${Duration.format(timeout)} deadline.`,
+                }),
+              ),
+          }),
+          Effect.withSpan(task.name),
+        ),
       );
       const now = DateTime.toEpochMillis(yield* DateTime.now);
       const previous = yield* Ref.get(state);
@@ -41,7 +67,12 @@ export const runBackgroundTask = Effect.fn("Discord.backgroundTask")(
           lastFailure: {
             at: now,
             message: error.message,
-            kind: Cause.hasDies(result.cause) ? ("defect" as const) : ("failure" as const),
+            kind:
+              error instanceof BackgroundTaskTimeout
+                ? ("timeout" as const)
+                : Cause.hasDies(result.cause)
+                  ? ("defect" as const)
+                  : ("failure" as const),
           },
           consecutiveFailures: previous.consecutiveFailures + 1,
         };
@@ -52,6 +83,7 @@ export const runBackgroundTask = Effect.fn("Discord.backgroundTask")(
             : { ...history, status: "stopped", reason: "failure" },
         );
         yield* Effect.suspend(() => report(error)).pipe(
+          Effect.timeout(reportingTimeout),
           Effect.annotateLogs({
             backgroundTaskStatus: task.onFailure === "continue" ? "retrying" : "stopped",
           }),

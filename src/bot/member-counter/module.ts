@@ -17,6 +17,7 @@ export const memberCounterFeature = {
         {
           name: "member-counter",
           interval: "10 minutes",
+          timeout: "5 minutes",
           onFailure: "continue",
           run: () => refreshMemberCounters(client, store),
         },

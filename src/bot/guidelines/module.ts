@@ -18,6 +18,7 @@ export const guidelinesFeature = {
         {
           name: "guidelines-gate",
           interval: "1 minute",
+          timeout: "10 minutes",
           onFailure: "continue",
           run: () => guidelines.refresh(client),
         },

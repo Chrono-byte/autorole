@@ -62,6 +62,14 @@ test("bot-status privately shows current task health, history, and retry times",
       consecutiveFailures: 1,
       lastFailure: { at: 0, kind: "failure", message: "Stopped" },
     },
+    {
+      ...history,
+      name: "timed-out",
+      status: "retrying",
+      nextRunAt: 60_000,
+      consecutiveFailures: 1,
+      lastFailure: { at: 0, kind: "timeout", message: "timed-out exceeded its 30s deadline." },
+    },
   ]);
   await f.run();
   expect(f.replies).toEqual([
@@ -74,6 +82,7 @@ test("bot-status privately shows current task health, history, and retry times",
         "healthy: Healthy. Next run: 1970-01-01T00:01:00.000Z\nLast success: 1970-01-01T00:00:00.000Z\nLast failure: None",
         "retrying: Retrying at 1970-01-01T00:01:00.000Z. Consecutive failures: 2\nLast success: Never\nLast failure: 1970-01-01T00:00:00.000Z (defect): Unavailable",
         "stopped: Stopped after failure\nLast success: Never\nLast failure: 1970-01-01T00:00:00.000Z (failure): Stopped",
+        "timed-out: Retrying at 1970-01-01T00:01:00.000Z. Consecutive failures: 1\nLast success: Never\nLast failure: 1970-01-01T00:00:00.000Z (timeout): timed-out exceeded its 30s deadline.",
       ].join("\n\n"),
     },
   ]);

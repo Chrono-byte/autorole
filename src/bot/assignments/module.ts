@@ -24,10 +24,17 @@ export const assignmentFeature = {
         {
           name: "role-assignments",
           interval: "1 minute",
+          timeout: "5 minutes",
           onFailure: "continue",
           run: () => assignments.reconcile(),
         },
-        { name: "roster-sync", interval: "5 minutes", onFailure: "continue", run: refreshRoster },
+        {
+          name: "roster-sync",
+          interval: "5 minutes",
+          timeout: "10 minutes",
+          onFailure: "continue",
+          run: refreshRoster,
+        },
       ],
       events: [
         event(Events.GuildMemberAdd, (member) => assignments.observeJoin(member)),
