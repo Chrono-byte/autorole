@@ -1,3 +1,4 @@
+import { fetchCurrentMember } from "../member";
 import { type Guild } from "discord.js";
 import { Effect, Result } from "effect";
 import { discordRequest, forEachGuildMember, roleAssignability } from "@autorole/discord-framework";
@@ -39,9 +40,7 @@ const updateRosterMember = Effect.fn("Roster.updateMember")(function* (
   memberId: string,
   reason: string,
 ) {
-  const member = yield* discordRequest(() =>
-    guild.members.fetch({ user: memberId, force: true, cache: false }),
-  );
+  const member = yield* fetchCurrentMember(guild, memberId);
   const hasPlayer = member.roles.cache.has(playerRoleId);
   const hasTeam = teamRoleIds.some((id) => member.roles.cache.has(id));
   if (hasPlayer === hasTeam) return "unchanged" as const;

@@ -1,3 +1,4 @@
+import { fetchCurrentMember } from "../bot/member";
 import { Events, GatewayIntentBits, PermissionFlagsBits, type Guild } from "discord.js";
 import { Deferred, Effect } from "effect";
 import {
@@ -107,9 +108,7 @@ export const setupGuidelines = Effect.fn("Guidelines.setup")(function* (
   const mapping = yield* resolveTeamRoles(guild);
   let assignments = 0;
   for (const id of members) {
-    const member = yield* discordRequest(() =>
-      guild.members.fetch({ user: id, force: true, cache: false }),
-    );
+    const member = yield* fetchCurrentMember(guild, id);
     for (const team of mapping) {
       if (
         migrating.has(team.category) &&
@@ -119,9 +118,7 @@ export const setupGuidelines = Effect.fn("Guidelines.setup")(function* (
         yield* discordRequest(() =>
           member.roles.add(team.access, "Preserve access during guidelines migration"),
         );
-        const verified = yield* discordRequest(() =>
-          guild.members.fetch({ user: id, force: true, cache: false }),
-        );
+        const verified = yield* fetchCurrentMember(guild, id);
         if (!verified.roles.cache.has(team.access))
           return yield* new ConfigurationError({
             message: "Could not verify access role assignment; channel migration stopped.",

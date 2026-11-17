@@ -1,3 +1,4 @@
+import { fetchCurrentMember } from "../member";
 import { ChannelType, PermissionFlagsBits, type Guild, type GuildMember } from "discord.js";
 import { Effect, Result } from "effect";
 import { discordRequest, forEachGuildMember, roleAssignability } from "@autorole/discord-framework";
@@ -147,9 +148,7 @@ const updateMemberAccess = Effect.fn("TeamGate.updateMember")(function* (
   mapping: TeamRoles,
   memberId: string,
 ) {
-  const member = yield* discordRequest(() =>
-    guild.members.fetch({ user: memberId, force: true, cache: false }),
-  );
+  const member = yield* fetchCurrentMember(guild, memberId);
   const active = yield* store.active(guild.id);
   const accepted = !active || !!(yield* store.getAcceptance(active.id, member.id));
   const held = new Set(member.roles.cache.keys());

@@ -1,3 +1,4 @@
+import { fetchCurrentMember } from "../member";
 import {
   ApplicationIntegrationType,
   EmbedBuilder,
@@ -138,15 +139,11 @@ const preban = Effect.fn("AutoroleCommands.preban")(function* (
     yield* editResponse(interaction, "You cannot ban yourself, this bot, or the server owner.");
     return;
   }
-  const target = yield* discordRequest(() =>
-    guild.members.fetch({ user: userId, force: true, cache: false }),
-  ).pipe(
+  const target = yield* fetchCurrentMember(guild, userId).pipe(
     Effect.catch((error) => (error.code === 10007 ? Effect.succeed(null) : Effect.fail(error))),
   );
   if (target && interaction.user.id !== guild.ownerId) {
-    const actor = yield* discordRequest(() =>
-      guild.members.fetch({ user: interaction.user.id, force: true, cache: false }),
-    );
+    const actor = yield* fetchCurrentMember(guild, interaction.user.id);
     if (actor.roles.highest.comparePositionTo(target.roles.highest) <= 0) {
       yield* editResponse(
         interaction,
