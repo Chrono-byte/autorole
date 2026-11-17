@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { Effect, Schema, Semaphore } from "effect";
+import { Effect, Schema } from "effect";
 import { asError } from "../../effectful";
 import { StorageError } from "../../errors";
 
@@ -22,10 +22,6 @@ const operation = <A>(name: string, run: () => A) =>
   });
 
 export class AgreementStore {
-  readonly accessLock = Semaphore.makeUnsafe(1);
-
-  readonly renewalLock = Semaphore.makeUnsafe(1);
-
   private constructor(private readonly db: Database) {}
 
   static make = Effect.fn("AgreementStore.make")(function* (path: string) {
@@ -88,27 +84,25 @@ export class AgreementStore {
     version: string;
     startedAt: number;
   }) {
-    return this.accessLock.withPermit(
-      operation("startAgreementPeriod", () =>
-        this.db.transaction(() => {
-          this.db.run(
-            "INSERT INTO guideline_periods (id, guildId, channelId, messageId, period, version, startedAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [
-              input.id,
-              input.guildId,
-              input.channelId,
-              input.messageId,
-              input.period,
-              input.version,
-              input.startedAt,
-            ],
-          );
-          this.db.run(
-            "INSERT INTO guideline_active_period (guildId, periodId) VALUES (?, ?) ON CONFLICT(guildId) DO UPDATE SET periodId = excluded.periodId",
-            [input.guildId, input.id],
-          );
-        })(),
-      ),
+    return operation("startAgreementPeriod", () =>
+      this.db.transaction(() => {
+        this.db.run(
+          "INSERT INTO guideline_periods (id, guildId, channelId, messageId, period, version, startedAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          [
+            input.id,
+            input.guildId,
+            input.channelId,
+            input.messageId,
+            input.period,
+            input.version,
+            input.startedAt,
+          ],
+        );
+        this.db.run(
+          "INSERT INTO guideline_active_period (guildId, periodId) VALUES (?, ?) ON CONFLICT(guildId) DO UPDATE SET periodId = excluded.periodId",
+          [input.guildId, input.id],
+        );
+      })(),
     );
   }
 
@@ -154,19 +148,17 @@ export class AgreementStore {
   }
 
   grantCurrent(guildId: string, periodId: string, memberIds: readonly string[], grantedAt: number) {
-    return this.accessLock.withPermit(
-      operation("grantAgreementAccess", () =>
-        this.db.transaction(() => {
-          let changes = 0;
-          for (const memberId of memberIds) {
-            changes += this.db.run(
-              "INSERT INTO guideline_period_acceptances (periodId, memberId, agreedAt, source) SELECT p.id, ?, ?, 'admin' FROM guideline_periods p JOIN guideline_active_period a ON a.periodId = p.id WHERE p.id = ? AND p.guildId = ? ON CONFLICT(periodId, memberId) DO NOTHING",
-              [memberId, grantedAt, periodId, guildId],
-            ).changes;
-          }
-          return changes;
-        })(),
-      ),
+    return operation("grantAgreementAccess", () =>
+      this.db.transaction(() => {
+        let changes = 0;
+        for (const memberId of memberIds) {
+          changes += this.db.run(
+            "INSERT INTO guideline_period_acceptances (periodId, memberId, agreedAt, source) SELECT p.id, ?, ?, 'admin' FROM guideline_periods p JOIN guideline_active_period a ON a.periodId = p.id WHERE p.id = ? AND p.guildId = ? ON CONFLICT(periodId, memberId) DO NOTHING",
+            [memberId, grantedAt, periodId, guildId],
+          ).changes;
+        }
+        return changes;
+      })(),
     );
   }
 

@@ -3,25 +3,18 @@ import {
   type Client,
   type Message,
   type PartialMessage,
-  type MessageCreateOptions,
   type TextChannel,
 } from "discord.js";
 import { Effect, Result } from "effect";
-import { discordRequest } from "@autorole/discord-framework";
+import { discordRequest, messageTransport, type MessageChannel } from "@autorole/discord-framework";
 import { ConfigurationError, DiscordRequestError } from "../../errors";
 import { SuggestionStore } from "./SuggestionStore";
-
-function files(message: Message) {
-  return [...message.attachments.values()].map((attachment) => ({
-    attachment: attachment.url,
-    name: attachment.name ?? "attachment",
-  }));
-}
 
 function payload(message: Message, recipient: string, fromUser: boolean) {
   const sender =
     message.member?.displayName ?? message.author.globalName ?? message.author.username;
   return {
+    content: null,
     embeds: [
       new EmbedBuilder()
         .setAuthor({
@@ -32,8 +25,6 @@ function payload(message: Message, recipient: string, fromUser: boolean) {
         .setDescription(message.content || "Attachment")
         .setFooter({ text: `To ${recipient}` }),
     ],
-    files: files(message),
-    allowedMentions: { parse: [] as [], repliedUser: false },
   };
 }
 
@@ -43,31 +34,29 @@ export class SuggestionMessages {
     private readonly store: SuggestionStore,
   ) {}
 
-  private webhook = Effect.fn("SuggestionMessages.webhook")(function* (
-    this: SuggestionMessages,
+  private memberTransport(
     inbox: TextChannel,
-    id?: string,
+    threadId: string,
+    message: Message,
+    webhookId?: string,
   ) {
-    const hooks = yield* discordRequest(() => inbox.fetchWebhooks());
-    const hook = hooks.find(
-      (candidate) =>
-        candidate.isIncoming() &&
-        candidate.owner?.id === this.client.user?.id &&
-        candidate.channelId === inbox.id &&
-        (id ? candidate.id === id : candidate.name === "Sigil suggestions"),
-    );
-    if (hook?.isIncoming() && hook.token) return hook;
-    if (id)
-      return yield* new ConfigurationError({
-        message: "The webhook for this suggestion message is unavailable.",
-      });
-    return yield* discordRequest(() =>
-      inbox.createWebhook({
-        name: "Sigil suggestions",
-        reason: "Relay private suggestions with member identity",
-      }),
-    );
-  });
+    const ownerId = this.client.user?.id;
+    if (!ownerId)
+      return Effect.fail(new ConfigurationError({ message: "Discord application is not ready." }));
+    return messageTransport({
+      type: "webhook",
+      channel: inbox,
+      ownerId,
+      name: "Sigil suggestions",
+      reason: "Relay private suggestions with member identity",
+      threadId,
+      webhookId,
+      identity: {
+        username: `${message.author.globalName ?? message.author.username} (@${message.author.username})`,
+        avatarURL: message.author.displayAvatarURL(),
+      },
+    });
+  }
 
   private threadPayload = Effect.fn("SuggestionMessages.threadPayload")(function* (
     this: SuggestionMessages,
@@ -107,19 +96,14 @@ export class SuggestionMessages {
       }
       embeds.push(quote);
     }
-    return {
-      content: message.content || null,
-      embeds,
-      files: files(message),
-      allowedMentions: { parse: [] as [], repliedUser: false },
-    };
+    return { embeds };
   });
 
   send = Effect.fn("SuggestionMessages.send")(function* (
     this: SuggestionMessages,
     message: Message,
     entry: { userId: string; threadId: string },
-    destination: { id: string; send: (options: MessageCreateOptions) => PromiseLike<Message> },
+    destination: MessageChannel & { id: string },
     fromUser: boolean,
     inbox: TextChannel,
   ) {
@@ -141,33 +125,14 @@ export class SuggestionMessages {
             ? linked.sourceId
             : undefined
         : undefined;
-    let webhookId: string | undefined;
-    let sent: Message;
-    if (fromUser) {
-      const hook = yield* this.webhook(inbox);
-      const body = yield* this.threadPayload(message, entry.threadId, replyId);
-      sent = yield* discordRequest(() =>
-        hook.send({
-          ...body,
-          content: body.content ?? undefined,
-          threadId: entry.threadId,
-          username:
-            `${message.author.globalName ?? message.author.username} (@${message.author.username})`.slice(
-              0,
-              80,
-            ),
-          avatarURL: message.author.displayAvatarURL(),
-        }),
-      );
-      webhookId = hook.id;
-    } else {
-      sent = yield* discordRequest(() =>
-        destination.send({
-          ...payload(message, recipient, false),
-          ...(replyId ? { reply: { messageReference: replyId, failIfNotExists: false } } : {}),
-        }),
-      );
-    }
+    const transport = fromUser
+      ? yield* this.memberTransport(inbox, entry.threadId, message)
+      : yield* messageTransport({ type: "channel", channel: destination });
+    const body = fromUser
+      ? yield* this.threadPayload(message, entry.threadId, replyId)
+      : payload(message, recipient, false);
+    const sent = yield* transport.send({ source: message, ...body }, replyId);
+    const webhookId = transport.webhookId;
     yield* this.store.linkMessage({
       threadId: entry.threadId,
       sourceId: message.id,
@@ -190,7 +155,7 @@ export class SuggestionMessages {
     const message = incoming.partial ? yield* discordRequest(() => incoming.fetch()) : incoming;
     if (message.author.bot || message.webhookId || message.author.id !== link.authorId) return;
     if (link.webhookId) {
-      const hook = yield* this.webhook(inbox, link.webhookId);
+      const transport = yield* this.memberTransport(inbox, link.threadId, message, link.webhookId);
       const referenced = message.reference?.messageId
         ? yield* this.store.getMessage(message.reference.messageId)
         : null;
@@ -203,9 +168,7 @@ export class SuggestionMessages {
               : undefined
           : undefined;
       const body = yield* this.threadPayload(message, link.threadId, replyId);
-      yield* discordRequest(() =>
-        hook.editMessage(link.destinationId, { ...body, attachments: [], threadId: link.threadId }),
-      );
+      yield* transport.edit(link.destinationId, { source: message, ...body });
       return;
     }
     const destination = yield* discordRequest(() =>
@@ -222,12 +185,10 @@ export class SuggestionMessages {
     const recipient = fromUser
       ? "officers"
       : `${user.globalName ?? user.username} (@${user.username})`;
-    yield* discordRequest(() =>
-      destination.messages.edit(link.destinationId, {
-        ...payload(message, recipient, fromUser),
-        content: null,
-        attachments: [],
-      }),
-    );
+    const transport = yield* messageTransport({ type: "channel", channel: destination });
+    yield* transport.edit(link.destinationId, {
+      source: message,
+      ...payload(message, recipient, fromUser),
+    });
   });
 }

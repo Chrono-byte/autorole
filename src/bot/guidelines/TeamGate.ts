@@ -1,14 +1,7 @@
-import {
-  ChannelType,
-  PermissionFlagsBits,
-  type Client,
-  type Guild,
-  type GuildMember,
-} from "discord.js";
-import { Effect, Result, Schedule } from "effect";
+import { ChannelType, PermissionFlagsBits, type Guild, type GuildMember } from "discord.js";
+import { Effect, Result } from "effect";
 import { discordRequest, forEachGuildMember, roleAssignability } from "@autorole/discord-framework";
 import { ConfigurationError } from "../../errors";
-import { logError } from "../../logger";
 import { rosterGuildId, teamRoleIds } from "../commands/syncRoster";
 import { AgreementStore } from "./AgreementStore";
 
@@ -176,61 +169,47 @@ const updateMemberAccess = Effect.fn("TeamGate.updateMember")(function* (
   return changed;
 });
 
-export const reconcileTeamGate = Effect.fn("TeamGate.reconcile")(
-  function* (guild: Guild, store: AgreementStore, configured?: TeamRoles) {
-    const mapping = configured ?? (yield* resolveTeamRoles(guild));
-    yield* validateTeamGate(guild, mapping);
-    const members: string[] = [];
-    yield* forEachGuildMember(
-      guild,
-      (member) =>
-        Effect.sync(() => {
-          if (
-            mapping.some(
-              (team) =>
-                member.roles.cache.has(team.access) ||
-                team.identity.some((id) => member.roles.cache.has(id)),
-            )
+export const applyTeamGate = Effect.fn("TeamGate.reconcile")(function* (
+  guild: Guild,
+  store: AgreementStore,
+  configured?: TeamRoles,
+) {
+  const mapping = configured ?? (yield* resolveTeamRoles(guild));
+  yield* validateTeamGate(guild, mapping);
+  const members: string[] = [];
+  yield* forEachGuildMember(
+    guild,
+    (member) =>
+      Effect.sync(() => {
+        if (
+          mapping.some(
+            (team) =>
+              member.roles.cache.has(team.access) ||
+              team.identity.some((id) => member.roles.cache.has(id)),
           )
-            members.push(member.id);
-        }),
-      new ConfigurationError({
-        message: "Could not read all members; no access roles were changed.",
+        )
+          members.push(member.id);
       }),
-    );
-    let changed = 0;
-    const failed: string[] = [];
-    for (const id of members) {
-      const result = yield* Effect.result(updateMemberAccess(guild, store, mapping, id));
-      if (Result.isFailure(result)) failed.push(id);
-      else if (result.success) changed++;
-    }
-    return { changed, failed };
-  },
-  (effect, _guild, store, _configured?: TeamRoles) => store.accessLock.withPermit(effect),
-);
-
-export const reconcileMemberAccess = Effect.fn("TeamGate.reconcileMember")(
-  function* (member: GuildMember, store: AgreementStore) {
-    if (member.guild.id !== rosterGuildId) return;
-    const mapping = yield* resolveTeamRoles(member.guild);
-    yield* validateTeamGate(member.guild, mapping);
-    yield* updateMemberAccess(member.guild, store, mapping, member.id);
-  },
-  (effect, _member, store) => store.accessLock.withPermit(effect),
-);
-
-export function automaticTeamGate(client: Client, store: AgreementStore) {
-  const refresh = Effect.gen(function* () {
-    const guild = client.guilds.cache.get(rosterGuildId);
-    if (!guild) return;
-    const result = yield* reconcileTeamGate(guild, store);
-    if (result.failed.length)
-      yield* logError("guidelines_gate_incomplete", { failed: result.failed.join(",") });
-  });
-  return refresh.pipe(
-    Effect.catch((error) => logError("guidelines_gate_failed", { message: error.message })),
-    Effect.repeat(Schedule.spaced("1 minute")),
-    Effect.asVoid,
+    new ConfigurationError({
+      message: "Could not read all members; no access roles were changed.",
+    }),
   );
-}
+  let changed = 0;
+  const failed: string[] = [];
+  for (const id of members) {
+    const result = yield* Effect.result(updateMemberAccess(guild, store, mapping, id));
+    if (Result.isFailure(result)) failed.push(id);
+    else if (result.success) changed++;
+  }
+  return { changed, failed };
+});
+
+export const applyMemberAccess = Effect.fn("TeamGate.reconcileMember")(function* (
+  member: GuildMember,
+  store: AgreementStore,
+) {
+  if (member.guild.id !== rosterGuildId) return;
+  const mapping = yield* resolveTeamRoles(member.guild);
+  yield* validateTeamGate(member.guild, mapping);
+  yield* updateMemberAccess(member.guild, store, mapping, member.id);
+});

@@ -1,7 +1,7 @@
 import { GatewayIntentBits, Partials } from "discord.js";
 import { Effect } from "effect";
 import { runBot } from "@autorole/discord-framework";
-import { makeAutorole } from "./module";
+import { autoroleModules } from "./module";
 import { asError } from "../effectful";
 import { DiscordRequestError } from "../errors";
 import { type Configuration } from "../config/Configuration";
@@ -42,24 +42,21 @@ export const runAutorole = Effect.fn("Autorole.run")(function* (configuration: C
       ],
       partials: [Partials.Channel, Partials.Message],
     },
-    modules: [
-      (client) =>
-        makeAutorole(client, {
-          path:
-            process.env.AUTOROLE_STATE_PATH ||
-            (process.env.STATE_DIRECTORY
-              ? `${process.env.STATE_DIRECTORY}/assignments.sqlite`
-              : "./data/assignments.sqlite"),
-          guildId: configuration.guildId,
-          report: (error, guildId, memberId) =>
-            logError("autorole_assignment_error", {
-              guildId,
-              memberId,
-              code: error instanceof DiscordRequestError ? error.code : undefined,
-              message: asError(error).message,
-            }),
+    modules: autoroleModules({
+      path:
+        process.env.AUTOROLE_STATE_PATH ||
+        (process.env.STATE_DIRECTORY
+          ? `${process.env.STATE_DIRECTORY}/assignments.sqlite`
+          : "./data/assignments.sqlite"),
+      guildId: configuration.guildId,
+      report: (error, guildId, memberId) =>
+        logError("autorole_assignment_error", {
+          guildId,
+          memberId,
+          code: error instanceof DiscordRequestError ? error.code : undefined,
+          message: asError(error).message,
         }),
-    ],
+    }),
     reportHandler,
     reportDiscord: (error) => logError("autorole_error", { message: error.message }),
     presence: { name: "Overwatch", statuses: overwatchStatuses, interval: MINUTE_MS },

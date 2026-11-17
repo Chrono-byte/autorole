@@ -1,9 +1,5 @@
 import {
   ApplicationIntegrationType,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  type Guild,
   AttachmentBuilder,
   InteractionContextType,
   PermissionFlagsBits,
@@ -15,21 +11,14 @@ import {
   CommandCatalog,
   deferEphemeral,
   forEachGuildMember,
-  discordRequest,
   editResponse,
   replyEphemeral,
 } from "@autorole/discord-framework";
-import {
-  teamDefinitions,
-  guidelinesChannelId,
-  resolveTeamRoles,
-  validateTeamGate,
-  reconcileTeamGate,
-} from "./TeamGate";
+import { teamDefinitions } from "./TeamGate";
 import { rosterGuildId } from "../commands/syncRoster";
-import { AgreementStore } from "./AgreementStore";
+import { agreementPrefix as prefix } from "./AgreementPanel";
+import { type GuidelinesCoordinator } from "./GuidelinesCoordinator";
 
-const prefix = "guidelines:agree:";
 const guidelinesDefinition = new SlashCommandBuilder()
   .setName("guidelines-renew")
   .setDescription("Start a new guidelines agreement period")
@@ -65,11 +54,11 @@ const guidelinesStatusDefinition = new SlashCommandBuilder()
   .setIntegrationTypes(ApplicationIntegrationType.GuildInstall)
   .addUserOption((o) => o.setName("member").setDescription("Show this member's agreement history"));
 
-export const guidelinesCommands = new CommandCatalog<AgreementStore>([
+export const guidelinesCommands = new CommandCatalog<GuidelinesCoordinator>([
   {
     definition: guidelinesDefinition,
     permissions: { guildOnly: true, member: PermissionFlagsBits.ManageGuild },
-    run: (store, interaction) =>
+    run: (guidelines, interaction) =>
       Effect.gen(function* () {
         yield* deferEphemeral(interaction);
         const guild = interaction.guild;
@@ -78,14 +67,14 @@ export const guidelinesCommands = new CommandCatalog<AgreementStore>([
             interaction,
             "Agreement renewal is only available in the Overwatch server.",
           );
-        yield* renewGuidelines(guild, store, {
+        yield* guidelines.renew(guild, {
           id: interaction.id,
           period: interaction.options.getString("period", true).trim(),
           version: interaction.options.getString("version", true).trim(),
           messageId: interaction.options.getString("message-id", true).trim(),
           startedAt: interaction.createdTimestamp,
         });
-        const result = yield* reconcileTeamGate(guild, store);
+        const result = yield* guidelines.reconcile(guild);
         yield* editResponse(
           interaction,
           `Agreement period started. ${result.changed} members updated.${result.failed.length ? ` ${result.failed.length} updates failed and will be retried.` : ""}`,
@@ -95,8 +84,9 @@ export const guidelinesCommands = new CommandCatalog<AgreementStore>([
   {
     definition: guidelinesStatusDefinition,
     permissions: { guildOnly: true, member: PermissionFlagsBits.ManageGuild },
-    run: (store, interaction) =>
+    run: (guidelines, interaction) =>
       Effect.gen(function* () {
+        const store = guidelines.agreements;
         const guild = interaction.guild;
         if (!guild)
           return yield* replyEphemeral(
@@ -174,8 +164,12 @@ export const guidelinesCommands = new CommandCatalog<AgreementStore>([
   },
 ]);
 
-export function guidelinesButton(store: AgreementStore, interaction: ButtonInteraction) {
+export function guidelinesButton(
+  guidelines: GuidelinesCoordinator,
+  interaction: ButtonInteraction,
+) {
   return Effect.gen(function* () {
+    const store = guidelines.agreements;
     const guildId = interaction.guildId;
     const periodId = interaction.customId.slice(prefix.length);
     if (!guildId || interaction.user.bot)
@@ -216,41 +210,3 @@ export function guidelinesButton(store: AgreementStore, interaction: ButtonInter
 }
 export const isGuidelinesButton = (interaction: ButtonInteraction) =>
   interaction.customId.startsWith(prefix);
-
-export function agreementButton(periodId: string) {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`${prefix}${periodId}`)
-      .setLabel("Agree to the Code of Conduct")
-      .setStyle(ButtonStyle.Primary),
-  );
-}
-
-export const renewGuidelines = Effect.fn("Guidelines.renew")(
-  function* (
-    guild: Guild,
-    store: AgreementStore,
-    period: { id: string; period: string; version: string; messageId: string; startedAt: number },
-  ) {
-    if (!period.period || !period.version || !/^\d{17,20}$/.test(period.messageId))
-      return yield* Effect.fail(
-        new Error("Provide a semester, document version, and valid message ID."),
-      );
-    const mapping = yield* resolveTeamRoles(guild);
-    yield* validateTeamGate(guild, mapping);
-    const channel = yield* discordRequest(() => guild.channels.fetch(guidelinesChannelId));
-    if (!channel?.isTextBased() || !("messages" in channel))
-      return yield* Effect.fail(new Error("The team-guidelines channel is unavailable."));
-    const message = yield* discordRequest(() => channel.messages.fetch(period.messageId));
-    if (
-      message.author.id !== guild.client.user?.id ||
-      (!message.content.trim() && message.embeds.length === 0)
-    )
-      return yield* Effect.fail(
-        new Error("Choose a message containing the approved guidelines posted by this bot."),
-      );
-    yield* discordRequest(() => message.edit({ components: [agreementButton(period.id)] }));
-    yield* store.startPeriod({ ...period, guildId: guild.id, channelId: channel.id });
-  },
-  (effect, _guild, store, _period) => store.renewalLock.withPermit(effect),
-);

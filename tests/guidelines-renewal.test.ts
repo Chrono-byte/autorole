@@ -7,13 +7,11 @@ import {
   type Guild,
   type ButtonInteraction,
 } from "discord.js";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
+import { GuidelinesCoordinator } from "../src/bot/guidelines/GuidelinesCoordinator";
+import { agreementButton } from "../src/bot/guidelines/AgreementPanel";
 import { AgreementStore } from "../src/bot/guidelines/AgreementStore";
-import {
-  agreementButton,
-  guidelinesButton,
-  renewGuidelines,
-} from "../src/bot/guidelines/GuidelinesCommand";
+import { guidelinesButton } from "../src/bot/guidelines/GuidelinesCommand";
 import {
   guidelinesChannelId,
   sharedTeamsCategoryId,
@@ -81,12 +79,30 @@ function fixture() {
     messages: { fetch: async () => message },
   };
   channels.set(guidelinesChannelId, channel);
+  const held = new Set(teamDefinitions.flatMap((team) => team.identity));
+  const member = {
+    id: "member",
+    user: { bot: false },
+    roles: {
+      get cache() {
+        return new Collection([...held].map((id) => [id, { id }]));
+      },
+      add: async (id: string) => {
+        held.add(id);
+      },
+      remove: async (id: string) => {
+        held.delete(id);
+      },
+    },
+  };
   const guild = {
     id: rosterGuildId,
     client: { user: { id: "bot" } },
     roles: { fetch: async () => roles },
     channels: { fetch: async (id?: string) => (id ? channels.get(id) : channels) },
     members: {
+      list: async () => new Collection([[member.id, member]]),
+      fetch: async () => member,
       fetchMe: async () => ({
         permissions: new PermissionsBitField(P.Administrator),
         roles: { highest: { comparePositionTo: () => 1 } },
@@ -100,8 +116,85 @@ function fixture() {
     messageId: "1566933194370977945",
     startedAt: 1000,
   };
-  return { guild, edits, message, period };
+  return { guild, edits, message, period, member, held };
 }
+
+test("concurrent renewals keep the installed button and active period in the same order", async () => {
+  const { guild, edits, message, period } = fixture();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const edit = message.edit;
+  message.edit = async (payload) => {
+    await edit(payload);
+    if (edits.length === 1) {
+      entered.resolve();
+      await release.promise;
+    }
+  };
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* AgreementStore.make(":memory:");
+        const guidelines = new GuidelinesCoordinator(store);
+        const first = yield* Effect.forkChild(guidelines.renew(guild, period), {
+          startImmediately: true,
+        });
+        yield* Effect.tryPromise(() => entered.promise);
+        const second = yield* Effect.forkChild(
+          guidelines.renew(guild, { ...period, id: "second" }),
+          { startImmediately: true },
+        );
+        expect(edits).toEqual([{ components: [agreementButton(period.id)] }]);
+        release.resolve();
+        yield* Fiber.join(first);
+        yield* Fiber.join(second);
+        expect(edits).toEqual([
+          { components: [agreementButton(period.id)] },
+          { components: [agreementButton("second")] },
+        ]);
+        expect((yield* store.active(rosterGuildId))?.id).toBe("second");
+      }),
+    ),
+  );
+});
+
+test("renewal waits for prior access writes before activating its period", async () => {
+  const { guild, message, period, member, held } = fixture();
+  const writing = Promise.withResolvers<void>();
+  const edited = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  member.roles.add = async (id) => {
+    writing.resolve();
+    await release.promise;
+    held.add(id);
+  };
+  message.edit = async () => {
+    edited.resolve();
+  };
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* AgreementStore.make(":memory:");
+        const guidelines = new GuidelinesCoordinator(store);
+        const access = yield* Effect.forkChild(guidelines.reconcile(guild), {
+          startImmediately: true,
+        });
+        yield* Effect.tryPromise(() => writing.promise);
+        const renewal = yield* Effect.forkChild(guidelines.renew(guild, period), {
+          startImmediately: true,
+        });
+        yield* Effect.tryPromise(() => edited.promise);
+        expect(yield* store.active(rosterGuildId)).toBeNull();
+        release.resolve();
+        yield* Fiber.join(access);
+        yield* Fiber.join(renewal);
+        expect((yield* store.active(rosterGuildId))?.id).toBe(period.id);
+        expect((yield* guidelines.reconcile(guild)).changed).toBe(1);
+        expect([...held]).toEqual(teamDefinitions.flatMap((team) => team.identity));
+      }),
+    ),
+  );
+});
 
 test("renewal installs a button without rewriting approved text, and only the current button records acceptance", async () => {
   const { guild, edits, message, period } = fixture();
@@ -109,7 +202,8 @@ test("renewal installs a button without rewriting approved text, and only the cu
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* AgreementStore.make(":memory:");
-        yield* renewGuidelines(guild, store, period);
+        const guidelines = new GuidelinesCoordinator(store);
+        yield* guidelines.renew(guild, period);
         expect(edits).toEqual([{ components: [agreementButton(period.id)] }]);
         expect(message.content).toBe("Approved code of conduct");
         expect((yield* store.active(rosterGuildId))?.version).toBe("2026-11-16");
@@ -125,16 +219,16 @@ test("renewal installs a button without rewriting approved text, and only the cu
             replies.push(payload);
           },
         } as unknown as ButtonInteraction;
-        yield* guidelinesButton(store, click);
-        yield* guidelinesButton(store, click);
+        yield* guidelinesButton(guidelines, click);
+        yield* guidelinesButton(guidelines, click);
         expect((yield* store.getAcceptance(period.id, "member"))?.agreedAt).toBe(2000);
-        yield* renewGuidelines(guild, store, {
+        yield* guidelines.renew(guild, {
           ...period,
           id: "fall-v2",
           version: "2026-11-17",
           startedAt: 4000,
         });
-        yield* guidelinesButton(store, click);
+        yield* guidelinesButton(guidelines, click);
         expect(replies.at(-1)).toMatchObject({
           content: "This agreement is no longer active. Ask an officer for the current one.",
         });
@@ -156,13 +250,14 @@ test("failed panel updates leave the previous agreement active", async () => {
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* AgreementStore.make(":memory:");
+        const guidelines = new GuidelinesCoordinator(store);
         yield* store.startPeriod({
           ...period,
           id: "previous",
           guildId: rosterGuildId,
           channelId: guidelinesChannelId,
         });
-        yield* renewGuidelines(guild, store, period).pipe(Effect.ignore);
+        yield* guidelines.renew(guild, period).pipe(Effect.ignore);
         expect((yield* store.active(rosterGuildId))?.id).toBe("previous");
       }),
     ),
@@ -176,7 +271,8 @@ test("renewal refuses to attach agreement controls to someone else's message", a
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* AgreementStore.make(":memory:");
-        yield* renewGuidelines(guild, store, period).pipe(Effect.ignore);
+        const guidelines = new GuidelinesCoordinator(store);
+        yield* guidelines.renew(guild, period).pipe(Effect.ignore);
         expect(edits).toEqual([]);
         expect(yield* store.active(rosterGuildId)).toBeNull();
       }),

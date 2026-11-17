@@ -584,6 +584,75 @@ test("relayed replies target the corresponding message in both directions and id
   );
 });
 
+test("long suggestions preserve their full text, attachments, and replies on send and edit", async () => {
+  const f = fixture();
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = yield* Suggestions.make(f.client, ":memory:");
+        yield* service.interaction(f.interaction("suggestions:open"));
+        const officer = f.message("What should we improve?", false);
+        yield* service.message(officer);
+        const officerCopyId = f.deliveredIds.at(-1)!;
+        const original = f.message(
+          "a".repeat(4000),
+          true,
+          new Collection([
+            ["file", { url: "https://cdn.discordapp.com/test.png", name: "test.png" }],
+          ]),
+        );
+        original.reference = {
+          messageId: officerCopyId,
+          channelId: "dm",
+          guildId: undefined,
+          type: MessageReferenceType.Default,
+        };
+        yield* service.message(original);
+        const copyId = f.deliveredIds.at(-1)!;
+        expect(f.sentToThread.at(-1)).toMatchObject({
+          content: undefined,
+          embeds: [
+            { data: { description: "What should we improve?" } },
+            { data: { description: "a".repeat(4000) } },
+          ],
+          files: [{ attachment: "https://cdn.discordapp.com/test.png", name: "test.png" }],
+        });
+        original.content = "b".repeat(3000);
+        yield* service.edited(original);
+        expect(f.deliveredEdits.at(-1)).toMatchObject({
+          messageId: copyId,
+          value: {
+            content: null,
+            embeds: [
+              { data: { description: "What should we improve?" } },
+              { data: { description: "b".repeat(3000) } },
+            ],
+            files: [{ attachment: "https://cdn.discordapp.com/test.png", name: "test.png" }],
+          },
+        });
+        original.content = "Short again";
+        yield* service.edited(original);
+        expect(f.deliveredEdits.at(-1)).toMatchObject({
+          messageId: copyId,
+          value: {
+            content: "Short again",
+            embeds: [{ data: { description: "What should we improve?" } }],
+          },
+        });
+        const reply = f.message("Thanks for the details", false);
+        reply.reference = {
+          messageId: copyId,
+          channelId: threadId,
+          guildId: suggestionGuildId,
+          type: MessageReferenceType.Default,
+        };
+        yield* service.message(reply);
+        expect(f.dms.at(-1)).toMatchObject({ reply: { messageReference: original.id } });
+      }),
+    ),
+  );
+});
+
 test(
   "message links survive restart and edits replace the delivered copy and attachments",
   async () => {

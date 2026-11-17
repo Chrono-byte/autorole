@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { Client, Events } from "discord.js";
 import { Effect } from "effect";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runAutorole } from "../src/bot/AutoroleBot";
@@ -72,7 +72,7 @@ function mockClient(ready: () => void, calls: string[]) {
 }
 
 test("autorole uses the framework lifecycle for login, ready events and scoped shutdown", async () => {
-  await withBotEnvironment(async () => {
+  await withBotEnvironment(async (directory) => {
     delete process.env.NOTIFY_SOCKET;
     const ready = Promise.withResolvers<void>();
     const calls: string[] = [];
@@ -90,6 +90,12 @@ test("autorole uses the framework lifecycle for login, ready events and scoped s
       abort.abort();
       expect(await completed).toBe("interrupted");
       expect(calls).toEqual(["login", "reconcile", "presence", "destroy"]);
+      expect((await readdir(directory)).toSorted()).toEqual([
+        "assignments.sqlite",
+        "assignments.sqlite.guidelines",
+        "assignments.sqlite.stats",
+        "assignments.sqlite.suggestions",
+      ]);
     } finally {
       abort.abort();
       await completed;

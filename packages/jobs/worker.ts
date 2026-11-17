@@ -1,4 +1,4 @@
-import { DateTime, Effect, Schedule } from "effect";
+import { DateTime, Effect } from "effect";
 import { JobCoordinator } from "./coordinator";
 
 export type JobOutcome = { type: "complete" } | { type: "retry"; delay: number } | { type: "skip" };
@@ -24,14 +24,6 @@ export class JobWorker<A, E> {
 
   stop() {
     return this.coordinator.stop();
-  }
-
-  start(interval: number, report: (error: E) => Effect.Effect<void>) {
-    return Effect.suspend(() => this.reconcile()).pipe(
-      Effect.catch(report),
-      Effect.repeat(Schedule.spaced(interval)),
-      Effect.asVoid,
-    );
   }
 
   reconcile() {

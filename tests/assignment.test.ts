@@ -1,4 +1,4 @@
-import { commandCatalog } from "../src/bot/commands";
+import { autoroleModules, commandDefinitions } from "../src/bot/module";
 import { expect, spyOn, test } from "bun:test";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -19,8 +19,7 @@ import { OutstandingAssignments } from "../src/bot/assignments/OutstandingAssign
 import { readConfiguration } from "../src/config/Configuration";
 import { RoleService } from "../src/bot/RoleService";
 import { autoroleCommands } from "../src/bot/commands/AutoroleCommands";
-import { makeAutorole } from "../src/bot/module";
-import { install } from "@autorole/discord-framework";
+import { composeModules, install } from "@autorole/discord-framework";
 
 const ids = {
   app: "100000000000000001",
@@ -78,9 +77,7 @@ class DiscordFixture {
     ) {
       return [
         {
-          ...commandCatalog.definitions
-            .find((definition) => definition.name === "autorole")
-            ?.toJSON(),
+          ...commandDefinitions.find((definition) => definition.name === "autorole")?.toJSON(),
           id: ids.command,
           application_id: ids.app,
           version: ids.command,
@@ -279,7 +276,7 @@ test("missing Manage Roles and insufficient hierarchy prevent role assignment", 
 });
 
 test("command definitions serialize without constructing runtime dependencies", () => {
-  expect(commandCatalog.definitions.map((definition) => definition.toJSON().name)).toEqual([
+  expect(commandDefinitions.map((definition) => definition.toJSON().name)).toEqual([
     "sync-roster",
     "preban",
     "autorole",
@@ -288,7 +285,7 @@ test("command definitions serialize without constructing runtime dependencies", 
     "guidelines-status",
   ]);
   expect(
-    commandCatalog.definitions.find((definition) => definition.name === "autorole")?.toJSON(),
+    commandDefinitions.find((definition) => definition.name === "autorole")?.toJSON(),
   ).toMatchObject({
     name: "autorole",
     default_member_permissions: "0",
@@ -659,7 +656,7 @@ test("a departed member is removed instead of retried", async () => {
   });
 });
 
-test("background reconciliation follows the test clock and stops with its fiber", async () => {
+test("reconciliation respects persisted retry deadlines", async () => {
   await withDiscord(async (fixture) => {
     const { member, roles } = await fixture.setup();
     member.guild.available = true;
@@ -676,16 +673,13 @@ test("background reconciliation follows the test clock and stops with its fiber"
             () => Effect.void,
           );
           yield* tracker.observeJoin(member);
-          const poller = yield* Effect.forkChild(tracker.start());
           fixture.permissions = [{ id: ids.target, type: 1, permission: true }];
           yield* TestClock.adjust(4 * 60_000);
+          yield* tracker.reconcile();
           expect(fixture.writes).toEqual([]);
           yield* TestClock.adjust(60_000);
+          yield* tracker.reconcile();
           expect(fixture.writes).toHaveLength(1);
-          yield* Fiber.interrupt(poller);
-          const reads = fixture.memberReads;
-          yield* TestClock.adjust(60 * 60_000);
-          expect(fixture.memberReads).toBe(reads);
         }),
       ).pipe(Effect.provide(TestClock.layer())),
     );
@@ -702,10 +696,14 @@ test("autorole module handles a join and removes its listeners on scope exit", a
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const module = yield* makeAutorole(fixture.client, {
-            path: ":memory:",
-            report: () => Effect.void,
-          });
+          const modules = yield* Effect.forEach(
+            autoroleModules({ path: ":memory:", report: () => Effect.void }),
+            (make) => make(fixture.client),
+          );
+          const module = composeModules(modules);
+          expect(module.commands.definitions.map((definition) => definition.toJSON())).toEqual(
+            commandDefinitions.map((definition) => definition.toJSON()),
+          );
           expect(module.commands.definitions.map((definition) => definition.toJSON().name)).toEqual(
             [
               "sync-roster",
@@ -716,6 +714,18 @@ test("autorole module handles a join and removes its listeners on scope exit", a
               "guidelines-status",
             ],
           );
+          expect(
+            module.background?.map(({ name, interval, onFailure }) => ({
+              name,
+              interval,
+              onFailure,
+            })),
+          ).toEqual([
+            { name: "role-assignments", interval: "1 minute", onFailure: "continue" },
+            { name: "roster-sync", interval: "5 minutes", onFailure: "continue" },
+            { name: "member-counter", interval: "10 minutes", onFailure: "continue" },
+            { name: "guidelines-gate", interval: "1 minute", onFailure: "continue" },
+          ]);
           yield* install(fixture.client, module.commands, module.events, () => Effect.void);
           fixture.client.emit(Events.GuildMemberAdd, member);
           yield* tryPromise(() => written.promise);

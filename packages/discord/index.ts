@@ -9,6 +9,7 @@ export {
 } from "./src/commands/registry";
 export { buttonEvent, event, install, type EventHandler } from "./src/runtime/events";
 export { composeModules, runBot, type BotModule, type BotModuleFactory } from "./src/runtime/bot";
+export { type BackgroundTask } from "./src/runtime/background";
 export { rotatePresence } from "./src/runtime/presence";
 export { options } from "./src/commands/options";
 export {
@@ -31,4 +32,4 @@ export {
 } from "./src/commands/response";
 export { fetchGuildMember, forEachGuildMember } from "./src/api/members";
 
-export { forwardMessage } from "./src/api/messages";
+export { messageTransport, WebhookUnavailable, type MessageChannel } from "./src/api/messages";

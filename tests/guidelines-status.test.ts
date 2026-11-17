@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { MessageFlags, PermissionsBitField, type ChatInputCommandInteraction } from "discord.js";
 import { Effect, Result } from "effect";
+import { GuidelinesCoordinator } from "../src/bot/guidelines/GuidelinesCoordinator";
 import { AgreementStore } from "../src/bot/guidelines/AgreementStore";
 import { guidelinesCommands } from "../src/bot/guidelines/GuidelinesCommand";
 
@@ -31,6 +32,7 @@ test("officers can inspect preserved agreements without a configured or active t
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* AgreementStore.make(":memory:");
+        const guidelines = new GuidelinesCoordinator(store);
         yield* store.startPeriod({
           id: "fall",
           guildId: "guild",
@@ -41,8 +43,8 @@ test("officers can inspect preserved agreements without a configured or active t
           startedAt: 1000,
         });
         yield* store.acceptCurrent("guild", "fall", "channel", "message", "member", 2000);
-        yield* store.deactivate("guild");
-        yield* guidelinesCommands.bind(store).dispatch(interaction);
+        yield* guidelines.deactivate("guild");
+        yield* guidelinesCommands.bind(guidelines).dispatch(interaction);
       }),
     ),
   );
@@ -58,6 +60,7 @@ test("inspection distinguishes previous agreement from agreement to the current 
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* AgreementStore.make(":memory:");
+        const guidelines = new GuidelinesCoordinator(store);
         const period = {
           id: "fall",
           guildId: "guild",
@@ -70,7 +73,7 @@ test("inspection distinguishes previous agreement from agreement to the current 
         yield* store.startPeriod(period);
         yield* store.acceptCurrent("guild", "fall", "channel", "message", "member", 2000);
         yield* store.startPeriod({ ...period, id: "revised", version: "v2", startedAt: 3000 });
-        yield* guidelinesCommands.bind(store).dispatch(interaction);
+        yield* guidelinesCommands.bind(guidelines).dispatch(interaction);
       }),
     ),
   );
@@ -85,7 +88,10 @@ test("agreement inspection remains restricted to Manage Server", async () => {
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* AgreementStore.make(":memory:");
-        const result = yield* Effect.result(guidelinesCommands.bind(store).dispatch(interaction));
+        const guidelines = new GuidelinesCoordinator(store);
+        const result = yield* Effect.result(
+          guidelinesCommands.bind(guidelines).dispatch(interaction),
+        );
         expect(Result.isFailure(result)).toBe(true);
         if (Result.isFailure(result))
           expect(result.failure.message).toBe("You do not have permission to use this command.");
@@ -101,6 +107,7 @@ test("long agreement histories retain more than 25 records and use a private att
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* AgreementStore.make(":memory:");
+        const guidelines = new GuidelinesCoordinator(store);
         for (let i = 0; i < 26; i++) {
           yield* store.startPeriod({
             id: `period-${i}`,
@@ -121,7 +128,7 @@ test("long agreement histories retain more than 25 records and use a private att
           );
         }
         expect(yield* store.history("guild", "member")).toHaveLength(26);
-        yield* guidelinesCommands.bind(store).dispatch(interaction);
+        yield* guidelinesCommands.bind(guidelines).dispatch(interaction);
       }),
     ),
   );
@@ -140,6 +147,7 @@ test("administrative access grants are labeled separately from personal agreemen
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* AgreementStore.make(":memory:");
+        const guidelines = new GuidelinesCoordinator(store);
         yield* store.startPeriod({
           id: "fall",
           guildId: "guild",
@@ -149,8 +157,8 @@ test("administrative access grants are labeled separately from personal agreemen
           version: "2026-11-16",
           startedAt: 1000,
         });
-        yield* store.grantCurrent("guild", "fall", ["member"], 2000);
-        yield* guidelinesCommands.bind(store).dispatch(interaction);
+        yield* guidelines.grantCurrent("guild", "fall", ["member"], 2000);
+        yield* guidelinesCommands.bind(guidelines).dispatch(interaction);
       }),
     ),
   );

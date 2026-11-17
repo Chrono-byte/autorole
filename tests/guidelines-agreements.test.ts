@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
+import { GuidelinesCoordinator } from "../src/bot/guidelines/GuidelinesCoordinator";
 import { AgreementStore } from "../src/bot/guidelines/AgreementStore";
 
 test("agreement dates persist and repeat clicks preserve the original date", async () => {
@@ -80,7 +81,6 @@ test("renewal preserves prior agreements and rejects stale buttons", async () =>
 test("channel access roles preserve team membership and follow the current agreement", async () => {
   const { ChannelType, Collection, PermissionFlagsBits, PermissionsBitField } =
     await import("discord.js");
-  const { reconcileTeamGate } = await import("../src/bot/guidelines/TeamGate");
   const { rosterGuildId } = await import("../src/bot/commands/syncRoster");
   const mapping = [
     { category: "category", identity: ["team", "sub"], accessName: "Access", access: "access" },
@@ -168,6 +168,7 @@ test("channel access roles preserve team membership and follow the current agree
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* AgreementStore.make(":memory:");
+        const guidelines = new GuidelinesCoordinator(store);
         yield* store.startPeriod({
           id: "period",
           guildId: rosterGuildId,
@@ -177,18 +178,18 @@ test("channel access roles preserve team membership and follow the current agree
           version: "1",
           startedAt: 1,
         });
-        expect(yield* reconcileTeamGate(guild, store, mapping)).toEqual({
+        expect(yield* guidelines.reconcile(guild, mapping)).toEqual({
           changed: 1,
           failed: [],
         });
         expect([...assigned].toSorted()).toEqual(["captain", "team"]);
         yield* store.acceptCurrent(rosterGuildId, "period", "channel", "message", "member", 2);
-        expect(yield* reconcileTeamGate(guild, store, mapping)).toEqual({
+        expect(yield* guidelines.reconcile(guild, mapping)).toEqual({
           changed: 1,
           failed: [],
         });
         expect([...assigned].toSorted()).toEqual(["access", "captain", "team"]);
-        expect((yield* reconcileTeamGate(guild, store, mapping)).changed).toBe(0);
+        expect((yield* guidelines.reconcile(guild, mapping)).changed).toBe(0);
         yield* store.startPeriod({
           id: "renewed",
           guildId: rosterGuildId,
@@ -198,12 +199,12 @@ test("channel access roles preserve team membership and follow the current agree
           version: "2",
           startedAt: 3,
         });
-        expect((yield* reconcileTeamGate(guild, store, mapping)).changed).toBe(1);
+        expect((yield* guidelines.reconcile(guild, mapping)).changed).toBe(1);
         expect([...assigned].toSorted()).toEqual(["captain", "team"]);
         yield* store.acceptCurrent(rosterGuildId, "renewed", "channel", "message", "member", 4);
-        expect((yield* reconcileTeamGate(guild, store, mapping)).changed).toBe(1);
+        expect((yield* guidelines.reconcile(guild, mapping)).changed).toBe(1);
         assigned.delete("team");
-        expect((yield* reconcileTeamGate(guild, store, mapping)).changed).toBe(1);
+        expect((yield* guidelines.reconcile(guild, mapping)).changed).toBe(1);
         expect([...assigned]).toEqual(["captain"]);
       }),
     ),
@@ -215,6 +216,7 @@ test("disabling the gate retains agreement history", async () => {
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* AgreementStore.make(":memory:");
+        const guidelines = new GuidelinesCoordinator(store);
         yield* store.startPeriod({
           id: "period",
           guildId: "guild",
@@ -225,7 +227,7 @@ test("disabling the gate retains agreement history", async () => {
           startedAt: 1,
         });
         yield* store.acceptCurrent("guild", "period", "channel", "message", "member", 2);
-        yield* store.deactivate("guild");
+        yield* guidelines.deactivate("guild");
         expect(yield* store.active("guild")).toBeNull();
         expect((yield* store.getAcceptance("period", "member"))?.agreedAt).toBe(2);
       }),
@@ -268,6 +270,7 @@ test("administrative grants preserve personal agreements, are scoped to one peri
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* AgreementStore.make(":memory:");
+        const guidelines = new GuidelinesCoordinator(store);
         const period = {
           id: "current",
           guildId: "guild",
@@ -280,7 +283,12 @@ test("administrative grants preserve personal agreements, are scoped to one peri
         yield* store.startPeriod(period);
         yield* store.acceptCurrent("guild", "current", "channel", "message", "already-agreed", 20);
         expect(
-          yield* store.grantCurrent("guild", "current", ["already-agreed", "grandfathered"], 30),
+          yield* guidelines.grantCurrent(
+            "guild",
+            "current",
+            ["already-agreed", "grandfathered"],
+            30,
+          ),
         ).toBe(1);
         expect(yield* store.getAcceptance("current", "already-agreed")).toMatchObject({
           agreedAt: 20,
@@ -291,7 +299,7 @@ test("administrative grants preserve personal agreements, are scoped to one peri
           source: "admin",
         });
         expect(yield* store.getAcceptance("current", "later-joiner")).toBeNull();
-        expect(yield* store.grantCurrent("guild", "current", ["grandfathered"], 40)).toBe(0);
+        expect(yield* guidelines.grantCurrent("guild", "current", ["grandfathered"], 40)).toBe(0);
         expect((yield* store.getAcceptance("current", "grandfathered"))?.agreedAt).toBe(30);
         yield* store.acceptCurrent("guild", "current", "channel", "message", "grandfathered", 50);
         expect(yield* store.getAcceptance("current", "grandfathered")).toMatchObject({
@@ -301,7 +309,7 @@ test("administrative grants preserve personal agreements, are scoped to one peri
         yield* store.acceptCurrent("guild", "current", "channel", "message", "grandfathered", 60);
         expect((yield* store.getAcceptance("current", "grandfathered"))?.agreedAt).toBe(50);
         yield* store.startPeriod({ ...period, id: "next", version: "next" });
-        expect(yield* store.grantCurrent("guild", "current", ["late"], 70)).toBe(0);
+        expect(yield* guidelines.grantCurrent("guild", "current", ["late"], 70)).toBe(0);
         expect(yield* store.getAcceptance("next", "grandfathered")).toBeNull();
       }),
     ),

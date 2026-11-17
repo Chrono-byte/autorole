@@ -4,11 +4,12 @@ import { CommandRegistry } from "../commands/registry";
 import { runClient } from "./client";
 import { event, install, type EventHandler, type Report } from "./events";
 import { rotatePresence } from "./presence";
+import { runBackgroundTask, type BackgroundTask } from "./background";
 
 export type BotModule = {
   commands: CommandRegistry;
   events: readonly EventHandler[];
-  background?: readonly ((client: Client<true>) => Effect.Effect<void, Error>)[];
+  background?: readonly BackgroundTask[];
 };
 
 export type BotModuleFactory = (
@@ -17,10 +18,16 @@ export type BotModuleFactory = (
 
 /** Combine modules before installing listeners, rejecting conflicting commands. */
 export function composeModules(modules: readonly BotModule[]): BotModule {
+  const background = modules.flatMap((module) => module.background ?? []);
+  const names = new Set<string>();
+  for (const task of background) {
+    if (names.has(task.name)) throw new Error(`Duplicate background task: ${task.name}`);
+    names.add(task.name);
+  }
   return {
     commands: CommandRegistry.combine(modules.map((module) => module.commands)),
     events: modules.flatMap((module) => module.events),
-    background: modules.flatMap((module) => module.background ?? []),
+    background,
   };
 }
 
@@ -59,9 +66,7 @@ export const runBot = Effect.fn("Discord.runBot")(function* (options: {
                 Effect.gen(function* () {
                   for (const task of module.background ?? []) {
                     yield* Effect.forkIn(scope, { startImmediately: true })(
-                      Effect.suspend(() => task(readyClient)).pipe(
-                        Effect.catch(options.reportHandler),
-                      ),
+                      runBackgroundTask(task, readyClient, options.reportHandler),
                     );
                   }
                   if (options.presence) {

@@ -1,5 +1,5 @@
 import { Client, type ClientEvents, type ClientOptions } from "discord.js";
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import { discordRequest } from "../api/request";
 
 /** Acquire a Discord client for the current scope. */
@@ -25,7 +25,17 @@ export const listen = Effect.fn("Discord.listen")(function* <K extends keyof Cli
   const runSync = Effect.runSyncWith(yield* Effect.context());
   const listener = (...args: ClientEvents[K]) => {
     runSync(
-      Effect.forkIn(scope, { startImmediately: true })(handler(...args).pipe(Effect.catch(report))),
+      Effect.forkIn(scope, { startImmediately: true })(
+        Effect.suspend(() => handler(...args)).pipe(
+          Effect.catchCause((cause) => {
+            if (Cause.hasInterrupts(cause)) return Effect.failCause(cause);
+            const failure = Cause.squash(cause);
+            return report(failure instanceof Error ? failure : new Error(String(failure))).pipe(
+              Effect.annotateLogs({ discordEvent: event }),
+            );
+          }),
+        ),
+      ),
     );
   };
   yield* Effect.acquireRelease(

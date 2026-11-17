@@ -1,5 +1,5 @@
 import { type Client } from "discord.js";
-import { Effect, Schedule } from "effect";
+import { Effect } from "effect";
 import { discordRequest } from "@autorole/discord-framework";
 import { logError } from "../../logger";
 import { StatsStore } from "./StatsStore";
@@ -20,23 +20,19 @@ export function refreshServerStats(client: Client, guildId: string, channelId: s
   });
 }
 
-export function serverMemberCounter(client: Client, store: StatsStore) {
-  const refresh = Effect.gen(function* () {
-    const settings = yield* store.list();
-    for (const setting of settings) {
-      yield* refreshServerStats(client, setting.guildId, setting.channelId).pipe(
-        Effect.catch((error) =>
-          logError("server_stats_refresh_failed", {
-            guildId: setting.guildId,
-            message: error.message,
-          }),
-        ),
-      );
-    }
-  });
-  return refresh.pipe(
-    Effect.catch((error) => logError("server_stats_store_failed", { message: error.message })),
-    Effect.repeat(Schedule.spaced("10 minutes")),
-    Effect.asVoid,
-  );
-}
+export const refreshMemberCounters = Effect.fn("ServerStats.refreshAll")(function* (
+  client: Client,
+  store: StatsStore,
+) {
+  const settings = yield* store.list();
+  for (const setting of settings) {
+    yield* refreshServerStats(client, setting.guildId, setting.channelId).pipe(
+      Effect.catch((error) =>
+        logError("server_stats_refresh_failed", {
+          guildId: setting.guildId,
+          message: error.message,
+        }),
+      ),
+    );
+  }
+});

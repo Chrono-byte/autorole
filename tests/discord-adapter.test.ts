@@ -1,7 +1,51 @@
 import { expect, spyOn, test } from "bun:test";
 import { Events, type Client } from "discord.js";
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, Logger } from "effect";
 import { listen, makeClient } from "@autorole/discord-framework";
+
+for (const failure of ["typed", "defect", "factory"] as const) {
+  test(`event handlers report a ${failure} failure once and continue receiving events`, async () => {
+    const errors: string[] = [];
+    const handled: string[] = [];
+    const events: unknown[] = [];
+    const logger = Logger.make((options) => {
+      events.push(Logger.formatStructured.log(options).annotations["discordEvent"]);
+    });
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const client = yield* makeClient({ intents: [] }, () => Effect.void);
+          yield* listen(
+            client,
+            Events.Error,
+            (error) => {
+              if (error.message === "next")
+                return Effect.sync(() => {
+                  handled.push(error.message);
+                });
+              if (failure === "factory") throw new Error("factory failed");
+              return failure === "defect"
+                ? Effect.die(new Error("defect failed"))
+                : Effect.fail(new Error("typed failed"));
+            },
+            (error) =>
+              Effect.sync(() => {
+                errors.push(error.message);
+              }).pipe(
+                Effect.andThen(Effect.logError(error.message)),
+                Effect.provide(Logger.layer([logger])),
+              ),
+          );
+          expect(() => client.emit(Events.Error, new Error("fail"))).not.toThrow();
+          client.emit(Events.Error, new Error("next"));
+          expect(errors).toEqual([`${failure} failed`]);
+          expect(events).toEqual([Events.Error]);
+          expect(handled).toEqual(["next"]);
+        }),
+      ),
+    );
+  });
+}
 
 test("listeners run handlers, report failures, and are removed with their scope", async () => {
   const handled: string[] = [];
@@ -49,6 +93,7 @@ test("listeners run handlers, report failures, and are removed with their scope"
 
 test("scope closure interrupts running event handlers", async () => {
   let interrupted = false;
+  const errors: string[] = [];
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -66,7 +111,10 @@ test("scope closure interrupts running event handlers", async () => {
                 }),
               ),
             ),
-          () => Effect.void,
+          (error) =>
+            Effect.sync(() => {
+              errors.push(error.message);
+            }),
         );
         client.emit(Events.Error, new Error("start"));
         yield* Deferred.await(started);
@@ -74,6 +122,7 @@ test("scope closure interrupts running event handlers", async () => {
     ),
   );
   expect(interrupted).toBe(true);
+  expect(errors).toEqual([]);
 });
 
 test("command upserts use the selected scope and preserve unrelated commands", async () => {
@@ -321,19 +370,29 @@ test("bot runner starts module before readiness and shuts down on readiness fail
                 return {
                   commands: new CommandRegistry([]),
                   background: [
-                    (readyClient: import("discord.js").Client<true>) =>
-                      Effect.sync(() => {
-                        expect(readyClient === client).toBe(true);
-                        calls.push("background started");
-                      }).pipe(
-                        Effect.andThen(Effect.never),
-                        Effect.ensuring(
-                          Effect.sync(() => {
-                            calls.push("background stopped");
-                          }),
+                    {
+                      name: "long-running",
+                      interval: "1 minute",
+                      onFailure: "stop",
+                      run: (readyClient: import("discord.js").Client<true>) =>
+                        Effect.sync(() => {
+                          expect(readyClient === client).toBe(true);
+                          calls.push("background started");
+                        }).pipe(
+                          Effect.andThen(Effect.never),
+                          Effect.ensuring(
+                            Effect.sync(() => {
+                              calls.push("background stopped");
+                            }),
+                          ),
                         ),
-                      ),
-                    () => Effect.fail(new Error("background failed")),
+                    },
+                    {
+                      name: "failing",
+                      interval: "1 minute",
+                      onFailure: "stop",
+                      run: () => Effect.fail(new Error("background failed")),
+                    },
                   ],
                   events: [
                     event(

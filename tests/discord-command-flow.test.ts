@@ -325,6 +325,7 @@ test("preban requires permission and displays the target avatar after banning", 
     user: { id: "moderator" },
     guild: {
       members: {
+        fetch: async () => ({ roles: { highest: { comparePositionTo: () => 1 } } }),
         ban: async (...args: unknown[]) => {
           calls.push(args);
         },

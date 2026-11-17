@@ -3,7 +3,6 @@ import { Effect } from "effect";
 import { fetchGuildMember } from "@autorole/discord-framework";
 import { exponentialBackoff, JobWorker, type JobOutcome } from "@autorole/jobs";
 import { ConfigurationError, DiscordRequestError, StorageError } from "../../errors";
-import { logError } from "../../logger";
 import { AssignmentStore, assignmentKey, type Assignment } from "./AssignmentStore";
 import { RoleService } from "../RoleService";
 
@@ -66,12 +65,6 @@ export class OutstandingAssignments {
       (assignments) => assignments.stop(),
     );
   });
-
-  start() {
-    return this.worker.start(MINUTE_MS, (error) =>
-      logError("autorole_reconcile_failed", { operation: error.operation, message: error.message }),
-    );
-  }
 
   observeJoin = Effect.fn("OutstandingAssignments.observeJoin")(function* (
     this: OutstandingAssignments,

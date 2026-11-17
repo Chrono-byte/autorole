@@ -10,7 +10,6 @@ import { Effect, Result } from "effect";
 import {
   CommandCatalog,
   deferEphemeral,
-  deferResponse,
   discordRequest,
   editResponse,
   replyEphemeral,
@@ -130,7 +129,32 @@ const preban = Effect.fn("AutoroleCommands.preban")(function* (
     return;
   }
   const reason = interaction.options.getString("reason")?.trim();
-  yield* deferResponse(interaction);
+  yield* deferEphemeral(interaction);
+  if (
+    userId === interaction.user.id ||
+    userId === guild.ownerId ||
+    userId === interaction.client.user?.id
+  ) {
+    yield* editResponse(interaction, "You cannot ban yourself, this bot, or the server owner.");
+    return;
+  }
+  const target = yield* discordRequest(() =>
+    guild.members.fetch({ user: userId, force: true, cache: false }),
+  ).pipe(
+    Effect.catch((error) => (error.code === 10007 ? Effect.succeed(null) : Effect.fail(error))),
+  );
+  if (target && interaction.user.id !== guild.ownerId) {
+    const actor = yield* discordRequest(() =>
+      guild.members.fetch({ user: interaction.user.id, force: true, cache: false }),
+    );
+    if (actor.roles.highest.comparePositionTo(target.roles.highest) <= 0) {
+      yield* editResponse(
+        interaction,
+        "Your highest role must be above the member you want to ban.",
+      );
+      return;
+    }
+  }
   const user = yield* discordRequest(() => interaction.client.users.fetch(userId));
   yield* discordRequest(() =>
     guild.members.ban(userId, {

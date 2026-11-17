@@ -29,11 +29,30 @@ const events = [event(Events.Error, (error) => Effect.logError(error.message))];
 // yield* install(client, commands, events, (error) => Effect.logError(error.message));
 ```
 
-Handlers run in scoped fibers with the installing Effect's context. Closing the scope removes listeners and interrupts handlers. Duplicate command names are rejected; unknown or non-chat-input interactions are ignored. The package also provides client acquisition, Discord request error classification, command permission lookup, role assignability checks, and presence rotation. `runClient` acquires and closes the client, runs setup before login, and waits for shutdown; callers supply credentials, registration timing, and application-specific policy. It supports slash commands, button handlers, and typed Discord events.
+Handlers run in scoped fibers with the installing Effect's context. Event handlers report typed failures, Effect defects, and exceptions thrown before returning an Effect through the installed reporter. Reports inherit a `discordEvent` log annotation. A failed event invocation does not remove the listener or prevent later invocations. Closing the scope removes listeners and interrupts handlers without reporting cancellation as a failure. Duplicate command names are rejected; unknown or non-chat-input interactions are ignored. The package also provides client acquisition, Discord request error classification, command permission lookup, role assignability checks, and presence rotation. `runClient` acquires and closes the client, runs setup before login, and waits for shutdown; callers supply credentials, registration timing, and application-specific policy. It supports slash commands, button handlers, and typed Discord events.
 
 `runBot` combines client lifecycle, module installation, ready and error callbacks, and optional rotating presence. Its `modules` array contains factory functions that receive the client and return scoped Effects producing a command registry and event list. Factories run in declaration order before login; their commands and events are combined in that order. Duplicate command names fail startup before listeners are installed or login occurs. Resources acquired by module factories are released when the enclosing scope closes, including on startup failure.
 
-Modules can declare a `background` array of functions receiving the ready client. `runBot` starts these tasks once, in module order, after module ready handlers have started and before presence and the framework ready callback. Tasks run in separate scoped fibers, report failures through `reportHandler`, and are interrupted on shutdown. The framework does not retry failed tasks; recurring work supplies its own schedule and recovery policy.
+Modules declare recurring work with a `background` array of task descriptors:
+
+```ts
+background: [
+  {
+    name: "roster-sync",
+    interval: "5 minutes",
+    onFailure: "continue",
+    run: (client) => refreshRoster(client),
+  },
+];
+```
+
+Each task has a unique name, an Effect duration as its interval, a failure policy, and a `run` function for one pass. Duplicate task names across modules fail startup before login. `runBot` starts tasks once, in module order, after module ready handlers have started and before presence and the framework ready callback. Each task runs immediately in a separate scoped fiber, then waits its interval after each completed pass. A task never overlaps its own periodic passes. Different tasks and event handlers can run concurrently.
+
+`onFailure: "continue"` reports a typed failure through `reportHandler`, waits the interval, and runs another pass. `onFailure: "stop"` reports the failure and stops that task while the bot and other tasks continue. Defects are reported and stop the affected task under either policy. Reports carry the `backgroundTask`, `failurePolicy`, and `backgroundTaskStatus` log annotations. Status is `retrying` or `stopped`. Shutdown interrupts every task without reporting cancellation as a failure. Feature code retains domain-specific recovery, such as deferring an assignment or continuing past one failed member.
+
+Sigil's ordered feature list in `src/bot/module.ts` supplies both registration definitions and runtime module factories. Assignment and roster handling, suggestions, member counters, and guidelines each acquire their own resources and register their commands, events, and tasks. Importing registration definitions does not open stores or create a Discord client.
+
+The guidelines module shares one `GuidelinesCoordinator` across commands, member events, and periodic reconciliation. The coordinator serializes renewals and access updates, including period activation and administrative grants. `AgreementStore` owns SQLite transactions and exposes no workflow locks. Agreement reads and atomic acceptance recording use the coordinator's `agreements` view.
 
 Ready event handlers are started in module order before the framework ready callback, but run in separate fibers; they are not awaited to completion. A failed framework ready callback invokes `readyFailed` and shuts the bot down. Scope interruption closes listeners, background fibers, and the client. `composeModules` can also combine already constructed modules when installing without `runBot`.
 
@@ -41,6 +60,10 @@ Commands can declare `permissions` for guild-only, member, and bot permission ch
 
 `deferResponse`, `deferEphemeral`, `replyEphemeral`, and `editResponse` wrap the corresponding Discord calls in Effects. `deferResponse` starts a public response; `editResponse` accepts text or Discord edit options, including embeds and components. The framework reports unexpected command failures and sends a generic message; permission denials use their configured user-facing message without being reported as unexpected failures. If a command has already replied, the framework sends an ephemeral follow-up. For a deferred interaction it edits the original reply, whose visibility was fixed when deferred: a public deferral therefore produces a public generic error. Errors while sending the error response are also reported. The framework does not automatically defer commands.
 
-Use `buttonEvent(matches, run)` to register scoped button interactions with the same error handling as commands. Match only the component IDs your module owns; the framework does not acknowledge or defer the interaction automatically. `forwardMessage(message, destination)` copies message text and attachments with all mentions disabled. The caller decides which messages and destinations are authorized and handles empty or unsupported message types.
+Use `buttonEvent(matches, run)` to register scoped button interactions with the same error handling as commands. Match only the component IDs your module owns; the framework does not acknowledge or defer the interaction automatically.
+
+`messageTransport(destination)` returns `send(body, replyId?)`, `edit(messageId, body)`, and the selected `webhookId`, or `null` for channel delivery. A channel destination supplies `{ type: "channel", channel }`. A webhook destination supplies `{ type: "webhook", channel, ownerId, name, reason, threadId, identity, webhookId? }`. The identity contains `username` and `avatarURL`. The transport reuses a matching incoming webhook owned by that bot or creates one with the supplied name and reason. Supplying an existing webhook ID requires that exact webhook; an unavailable webhook fails with `WebhookUnavailable` rather than creating a replacement.
+
+A message body supplies `source`, with Discord message content and attachments, and optional presentation `content` and `embeds`. Omitting `content` uses the source text. Setting it to `null` allows the caller to present that text in its own embeds. Source text above 2,000 characters moves into an embed, supporting Discord's 4,000-character member messages. The transport copies attachments, disables mentions, and replaces prior attachments and embeds on edits. Channel sends can reply to a supplied message ID; webhook reply quotes remain the caller's presentation choice. The caller owns message authorization, recipients, sender presentation, reply mapping, and persistence.
 
 `forEachGuildMember(guild, visit, incomplete)` fetches uncached pages of up to 1,000 members and runs an Effect visitor sequentially for each member. It reports Discord failures, visitor failures, or the supplied `incomplete` error if pagination stops advancing. Visitors may already have run when a later page fails. For reconciliation that requires a complete scan, collect candidate changes in the visitor and apply them after the helper succeeds.
