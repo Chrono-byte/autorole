@@ -138,6 +138,7 @@ export const setupSuggestions = Effect.fn("Suggestions.setup")(function* (
     PermissionFlagsBits.CreatePrivateThreads |
     PermissionFlagsBits.SendMessagesInThreads;
   const trustedPosters = new Set([
+    guildId,
     "1557133002285387857",
     officerRoleId,
     "1415400507006124101",

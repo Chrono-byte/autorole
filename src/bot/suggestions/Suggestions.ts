@@ -18,7 +18,7 @@ import { Effect, Result, Semaphore } from "effect";
 import { deferEphemeral, editResponse, discordRequest } from "@autorole/discord-framework";
 import { ConfigurationError, DiscordRequestError } from "../../errors";
 import { logError } from "../../logger";
-import { SuggestionMessages } from "./SuggestionMessages";
+import { DeliveredButUnrecorded, SuggestionMessages } from "./SuggestionMessages";
 import { SuggestionStore } from "./SuggestionStore";
 import { privateSuggestionOverwrites } from "./privacy";
 
@@ -125,7 +125,10 @@ export class Suggestions {
           Effect.andThen(
             discordRequest(() =>
               incoming.reply({
-                content: "I couldn't deliver that message. Please try again or contact an officer.",
+                content:
+                  error instanceof DeliveredButUnrecorded
+                    ? "Your message was delivered, but I couldn't save its record. Please don't resend it; contact an officer."
+                    : "I couldn't deliver that message. Please try again or contact an officer.",
                 allowedMentions: { parse: [] },
               }),
             ).pipe(Effect.ignore),
@@ -398,7 +401,7 @@ export class Suggestions {
         reason: "Open a suggestion for the officer team",
       }),
     );
-    yield* Effect.gen({ self: this }, function* () {
+    const confirmation = yield* Effect.gen({ self: this }, function* () {
       const starter = yield* discordRequest(() =>
         thread.send({
           content: `Suggestion from <@${interaction.user.id}> (\`${interaction.user.id}\`). Reply in this thread to message them.`,
@@ -406,17 +409,15 @@ export class Suggestions {
           allowedMentions: { parse: [] },
         }),
       );
-      const confirmation = yield* discordRequest(() =>
+      yield* this.store.put(interaction.user.id, thread.id);
+      yield* this.store.trackControls(thread.id, thread.id, starter.id);
+      return yield* discordRequest(() =>
         dm.send({
           content:
             "You're talking to the officers. Your conversation is open. Send your suggestion here; officers can reply in this DM. Use the button below when you're finished.",
           components: [conversationButtons(thread.id)],
         }),
       );
-      yield* this.store.trackControls(thread.id, dm.id, confirmation.id);
-
-      yield* this.store.put(interaction.user.id, thread.id);
-      yield* this.store.trackControls(thread.id, thread.id, starter.id);
     }).pipe(
       Effect.onError(() =>
         this.store.remove(interaction.user.id, thread.id).pipe(
@@ -429,6 +430,11 @@ export class Suggestions {
         ),
       ),
     );
+    yield* this.store
+      .trackControls(thread.id, dm.id, confirmation.id)
+      .pipe(
+        Effect.catch((error) => logError("suggestions_controls_save_failed", { type: error.name })),
+      );
     yield* editResponse(interaction, "Your suggestion conversation is open. Check your DMs.");
   });
 

@@ -932,3 +932,57 @@ test(
   },
   sqliteTestTimeout,
 );
+
+test("storage failure before opening does not send an open confirmation", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "suggestion-open-fail-"));
+  const path = join(directory, "state.sqlite");
+  const f = fixture();
+  try {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const service = yield* Suggestions.make(f.client, path);
+          const { Database } = yield* Effect.promise(() => import("bun:sqlite"));
+          const db = new Database(path);
+          db.run(
+            "CREATE TRIGGER fail_open BEFORE INSERT ON active_suggestions BEGIN SELECT RAISE(FAIL, 'failed'); END",
+          );
+          db.close();
+          yield* service.interaction(f.interaction("suggestions:open"));
+          expect(f.dms).toHaveLength(0);
+          expect(f.deleted()).toBe(true);
+        }),
+      ),
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a delivered message whose link cannot be saved warns against retrying", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "suggestion-link-fail-"));
+  const path = join(directory, "state.sqlite");
+  const f = fixture();
+  try {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const service = yield* Suggestions.make(f.client, path);
+          yield* service.interaction(f.interaction("suggestions:open"));
+          const { Database } = yield* Effect.promise(() => import("bun:sqlite"));
+          const db = new Database(path);
+          db.run(
+            "CREATE TRIGGER fail_link BEFORE INSERT ON suggestion_messages BEGIN SELECT RAISE(FAIL, 'failed'); END",
+          );
+          db.close();
+          yield* service.message(f.message("hello", true));
+          expect(f.sentToThread).toHaveLength(2);
+          expect(f.errors.at(-1)).toContain("delivered");
+          expect(f.errors.at(-1)).toContain("don't resend");
+        }),
+      ),
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

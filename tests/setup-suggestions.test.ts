@@ -127,3 +127,17 @@ test("suggestion preflight is read-only", async () => {
   await Effect.runPromise(setupSuggestions(config, f.rest, { checkOnly: true }));
   expect(f.writes).toEqual([]);
 });
+
+test("setup removes existing public posting permissions", async () => {
+  const f = fixture();
+  f.panel.permission_overwrites.push({
+    id: guildId,
+    type: 0,
+    allow: F.SendMessages.toString(),
+    deny: "0",
+  });
+  await Effect.runPromise(setupSuggestions(config, f.rest));
+  const everyone = f.panel.permission_overwrites.find((entry) => entry.id === guildId)!;
+  expect(BigInt(everyone.allow) & F.SendMessages).toBe(0n);
+  expect(BigInt(everyone.deny) & F.SendMessages).toBe(F.SendMessages);
+});

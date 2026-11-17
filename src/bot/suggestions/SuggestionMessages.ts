@@ -10,6 +10,8 @@ import { discordRequest, messageTransport, type MessageChannel } from "@autorole
 import { ConfigurationError, DiscordRequestError } from "../../errors";
 import { SuggestionStore } from "./SuggestionStore";
 
+export class DeliveredButUnrecorded extends Error {}
+
 function payload(message: Message, recipient: string, fromUser: boolean) {
   const sender =
     message.member?.displayName ?? message.author.globalName ?? message.author.username;
@@ -144,15 +146,21 @@ export class SuggestionMessages {
       : payload(message, recipient, false);
     const sent = yield* transport.send({ source: message, ...body }, replyId);
     const webhookId = transport.webhookId;
-    yield* this.store.linkMessage({
-      threadId: entry.threadId,
-      sourceId: message.id,
-      sourceChannelId: message.channelId,
-      authorId: message.author.id,
-      destinationId: sent.id,
-      destinationChannelId: destination.id,
-      ...(webhookId ? { webhookId } : {}),
-    });
+    yield* this.store
+      .linkMessage({
+        threadId: entry.threadId,
+        sourceId: message.id,
+        sourceChannelId: message.channelId,
+        authorId: message.author.id,
+        destinationId: sent.id,
+        destinationChannelId: destination.id,
+        ...(webhookId ? { webhookId } : {}),
+      })
+      .pipe(
+        Effect.mapError(
+          () => new DeliveredButUnrecorded("Message delivered but link could not be saved"),
+        ),
+      );
   });
 
   edit = Effect.fn("SuggestionMessages.edit")(function* (
