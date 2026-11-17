@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { Collection, PermissionFlagsBits, PermissionsBitField, type Guild } from "discord.js";
+import {
+  Collection,
+  PermissionFlagsBits,
+  PermissionsBitField,
+  type Guild,
+  type Client,
+} from "discord.js";
+import { refreshRoster } from "../src/bot/AutomaticRoster";
 import { Effect } from "effect";
 import {
   playerRoleId,
@@ -86,6 +93,20 @@ test("roster sync adds and removes Player and reports per-member failures", asyn
     failed: 1,
   });
   expect(f.writes).toEqual(["add:add", "remove:remove"]);
+});
+
+test("periodic roster health reports incomplete updates and recovers on a later pass", async () => {
+  const f = fixture();
+  f.roster.set("fail", f.member("fail", [teamRoleIds[0]]));
+  f.roster.set("good", f.member("good", [teamRoleIds[0]]));
+  f.failWrite("fail");
+  const client = {
+    guilds: { cache: new Collection([[rosterGuildId, f.guild]]) },
+  } as unknown as Client;
+  await expect(Effect.runPromise(refreshRoster(client))).rejects.toThrow("1 member updates failed");
+  expect(f.writes).toEqual(["add:good"]);
+  f.failWrite("");
+  await Effect.runPromise(refreshRoster(client));
 });
 
 test("roster sync makes no changes if the member list fails or a required role is missing", async () => {

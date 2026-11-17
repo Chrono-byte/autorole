@@ -56,6 +56,10 @@ After deploying the bot, run `bun run setup:suggestions` with Sigil's token and 
 
 ## Maintenance
 
+Run `/bot-status` with Manage Server permission to inspect background task health privately. It shows each task's current state, last successful pass, last failure, and next retry or scheduled run. Long reports are attached in full. Register the command with `bun run register` after updating the bot.
+
+Background tasks, including presence rotation, retry failures on their configured intervals. Failed passes release temporary resources before retrying. A successful retry marks the task healthy, resets its consecutive failure count, and logs `background_task_recovered`; the last failure remains visible for diagnosis. Health snapshots reset on process restart. Discord and SQLite state are read again by the next reconciliation pass.
+
 ```sh
 bun run check                         # Types, lint, formatting, and tests
 bun run format                        # Apply lint fixes and formatting

@@ -8,9 +8,47 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { Effect, Result } from "effect";
-import { refreshServerStats } from "../src/bot/member-counter/ServerStats";
+import { refreshMemberCounters, refreshServerStats } from "../src/bot/member-counter/ServerStats";
 import { serverStatsCommands } from "../src/bot/member-counter/ServerStatsCommand";
 import { StatsStore } from "../src/bot/member-counter/StatsStore";
+
+test("counter health reports partial failure after updating other servers and recovers later", async () => {
+  const updates: string[] = [];
+  let unavailable = true;
+  const client = {
+    guilds: {
+      fetch: async (id: string) => {
+        if (id === "bad" && unavailable) throw new Error("Unavailable");
+        return {
+          members: { fetch: async () => new Collection([["human", { user: { bot: false } }]]) },
+          channels: {
+            fetch: async () => ({
+              name: "Old",
+              setName: async (name: string) => {
+                updates.push(`${id}:${name}`);
+              },
+            }),
+          },
+        };
+      },
+    },
+  } as unknown as Client;
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* StatsStore.make(":memory:");
+        yield* store.set("bad", "counter");
+        yield* store.set("good", "counter");
+        const failed = yield* Effect.result(refreshMemberCounters(client, store));
+        expect(Result.isFailure(failed)).toBe(true);
+        expect(updates).toEqual(["good:Members: 1"]);
+        unavailable = false;
+        yield* refreshMemberCounters(client, store);
+        expect(updates).toEqual(["good:Members: 1", "bad:Members: 1", "good:Members: 1"]);
+      }),
+    ),
+  );
+});
 
 test("setting the counter channel immediately updates its name before confirming", async () => {
   const actions: string[] = [];

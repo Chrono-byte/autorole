@@ -3,6 +3,7 @@ import { assignmentFeature } from "./assignments/module";
 import { suggestionsFeature } from "./suggestions/module";
 import { memberCounterFeature } from "./member-counter/module";
 import { guidelinesFeature } from "./guidelines/module";
+import { healthFeature } from "./health/module";
 import { type BotFeature, type BotOptions } from "./feature";
 
 const features: readonly BotFeature[] = [
@@ -10,6 +11,7 @@ const features: readonly BotFeature[] = [
   suggestionsFeature,
   memberCounterFeature,
   guidelinesFeature,
+  healthFeature,
 ];
 
 export const commandDefinitions = features.flatMap((feature) => feature.definitions);

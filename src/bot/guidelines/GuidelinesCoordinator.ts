@@ -12,7 +12,6 @@ import {
   type TeamRoles,
 } from "./TeamGate";
 import { rosterGuildId } from "../commands/syncRoster";
-import { logError } from "../../logger";
 
 export class GuidelinesCoordinator {
   private readonly accessLock = Semaphore.makeUnsafe(1);
@@ -82,6 +81,10 @@ export class GuidelinesCoordinator {
     if (!guild) return;
     const result = yield* this.reconcile(guild);
     if (result.failed.length)
-      yield* logError("guidelines_gate_incomplete", { failed: result.failed.join(",") });
+      return yield* Effect.fail(
+        new Error(
+          `Team access synchronization incomplete: ${result.failed.length} member updates failed (${result.failed.join(", ")}).`,
+        ),
+      );
   });
 }

@@ -1,31 +1,96 @@
 import { type Client } from "discord.js";
-import { Cause, type Duration, Effect, Schedule } from "effect";
+import { Cause, DateTime, Duration, Effect, Exit, Ref, type Scope } from "effect";
 import { type Report } from "./events";
+import { taskHistory, type BackgroundTaskHealth } from "./health";
 
 export type BackgroundTask = {
   name: string;
   interval: Duration.Input;
   onFailure: "continue" | "stop";
-  run: (client: Client<true>) => Effect.Effect<void, Error>;
+  run: (client: Client<true>) => Effect.Effect<void, Error, Scope.Scope>;
 };
 
-export function runBackgroundTask(task: BackgroundTask, client: Client<true>, report: Report) {
-  const reportFailure = (error: Error, status: "retrying" | "stopped") =>
-    report(error).pipe(Effect.annotateLogs({ backgroundTaskStatus: status }));
-  const pass = Effect.suspend(() => task.run(client)).pipe(Effect.withSpan(task.name));
-  const recover =
-    task.onFailure === "continue"
-      ? pass.pipe(Effect.catch((error) => reportFailure(error, "retrying")))
-      : pass;
-  return recover.pipe(
-    Effect.repeat(Schedule.spaced(task.interval)),
-    Effect.catchCause((cause) => {
-      if (Cause.hasInterrupts(cause)) return Effect.failCause(cause);
-      const failure = Cause.squash(cause);
-      const error = failure instanceof Error ? failure : new Error(String(failure));
-      return reportFailure(error, "stopped");
-    }),
-    Effect.annotateLogs({ backgroundTask: task.name, failurePolicy: task.onFailure }),
-    Effect.asVoid,
-  );
-}
+export const runBackgroundTask = Effect.fn("Discord.backgroundTask")(
+  function* (options: {
+    task: BackgroundTask;
+    interval: Duration.Duration;
+    state: Ref.Ref<BackgroundTaskHealth>;
+    client: Client<true>;
+    report: Report;
+  }) {
+    const { task, interval, state, client, report } = options;
+    const delay = Duration.toMillis(interval);
+    while (true) {
+      const startedAt = DateTime.toEpochMillis(yield* DateTime.now);
+      yield* Ref.update(state, (current): BackgroundTaskHealth => ({
+        ...taskHistory(current),
+        status: "running",
+        startedAt,
+      }));
+      const result = yield* Effect.exit(
+        Effect.scoped(Effect.suspend(() => task.run(client))).pipe(Effect.withSpan(task.name)),
+      );
+      const now = DateTime.toEpochMillis(yield* DateTime.now);
+      const previous = yield* Ref.get(state);
+      if (Exit.isFailure(result)) {
+        if (Cause.hasInterrupts(result.cause)) return yield* Effect.failCause(result.cause);
+        const failure = Cause.squash(result.cause);
+        const error = failure instanceof Error ? failure : new Error(String(failure));
+        const history = {
+          ...taskHistory(previous),
+          lastFailure: {
+            at: now,
+            message: error.message,
+            kind: Cause.hasDies(result.cause) ? ("defect" as const) : ("failure" as const),
+          },
+          consecutiveFailures: previous.consecutiveFailures + 1,
+        };
+        yield* Ref.set(
+          state,
+          task.onFailure === "continue"
+            ? { ...history, status: "retrying", nextRunAt: now + delay }
+            : { ...history, status: "stopped", reason: "failure" },
+        );
+        yield* Effect.suspend(() => report(error)).pipe(
+          Effect.annotateLogs({
+            backgroundTaskStatus: task.onFailure === "continue" ? "retrying" : "stopped",
+          }),
+          Effect.catchCause((cause) =>
+            Cause.hasInterrupts(cause)
+              ? Effect.failCause(cause)
+              : Effect.logError("background_report_failed", cause),
+          ),
+        );
+        if (task.onFailure === "stop") return;
+        const scheduledAt = DateTime.toEpochMillis(yield* DateTime.now);
+        yield* Ref.set(state, { ...history, status: "retrying", nextRunAt: scheduledAt + delay });
+      } else {
+        yield* Ref.set(state, {
+          ...taskHistory(previous),
+          status: "healthy",
+          nextRunAt: now + delay,
+          lastSuccessAt: now,
+          consecutiveFailures: 0,
+        });
+        if (previous.consecutiveFailures > 0)
+          yield* Effect.logInfo("background_task_recovered").pipe(
+            Effect.annotateLogs({
+              consecutiveFailures: previous.consecutiveFailures,
+            }),
+          );
+      }
+      yield* Effect.sleep(interval);
+    }
+  },
+  (effect, { task, state }) =>
+    effect.pipe(
+      Effect.onInterrupt(() =>
+        Ref.update(state, (current): BackgroundTaskHealth =>
+          current.status === "stopped"
+            ? current
+            : { ...taskHistory(current), status: "stopped", reason: "shutdown" },
+        ),
+      ),
+      Effect.annotateLogs({ backgroundTask: task.name, failurePolicy: task.onFailure }),
+    ),
+);

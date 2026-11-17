@@ -10,7 +10,12 @@ export {
 export { buttonEvent, event, install, type EventHandler } from "./src/runtime/events";
 export { composeModules, runBot, type BotModule, type BotModuleFactory } from "./src/runtime/bot";
 export { type BackgroundTask } from "./src/runtime/background";
-export { rotatePresence } from "./src/runtime/presence";
+export {
+  BackgroundHealth,
+  type BackgroundTaskHealth,
+  type BackgroundTaskFailure,
+} from "./src/runtime/health";
+export { presenceTask } from "./src/runtime/presence";
 export { options } from "./src/commands/options";
 export {
   checkPermissions,

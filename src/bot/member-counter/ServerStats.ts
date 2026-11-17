@@ -25,14 +25,25 @@ export const refreshMemberCounters = Effect.fn("ServerStats.refreshAll")(functio
   store: StatsStore,
 ) {
   const settings = yield* store.list();
+  const failed: string[] = [];
   for (const setting of settings) {
     yield* refreshServerStats(client, setting.guildId, setting.channelId).pipe(
       Effect.catch((error) =>
         logError("server_stats_refresh_failed", {
           guildId: setting.guildId,
           message: error.message,
-        }),
+        }).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              failed.push(setting.guildId);
+            }),
+          ),
+        ),
       ),
     );
   }
+  if (failed.length)
+    return yield* Effect.fail(
+      new Error(`Member counter refresh incomplete for servers: ${failed.join(", ")}.`),
+    );
 });

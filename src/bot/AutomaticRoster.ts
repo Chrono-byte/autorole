@@ -1,6 +1,5 @@
 import { type Client, type GuildMember, type PartialGuildMember } from "discord.js";
 import { Effect } from "effect";
-import { logError } from "../logger";
 import {
   playerRoleId,
   rosterGuildId,
@@ -26,5 +25,8 @@ export const refreshRoster = Effect.fn("Roster.refresh")(function* (client: Clie
   const guild = client.guilds.cache.get(rosterGuildId);
   if (!guild) return;
   const result = yield* syncRoster(guild);
-  if (result.failed) yield* logError("roster_sync_incomplete", { failed: result.failed });
+  if (result.failed)
+    return yield* Effect.fail(
+      new Error(`Roster synchronization incomplete: ${result.failed} member updates failed.`),
+    );
 });

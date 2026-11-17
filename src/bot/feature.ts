@@ -1,6 +1,10 @@
 import { type Client } from "discord.js";
 import { type Effect, type Scope } from "effect";
-import { type BotModule, type CommandDefinition } from "@autorole/discord-framework";
+import {
+  type BackgroundHealth,
+  type BotModule,
+  type CommandDefinition,
+} from "@autorole/discord-framework";
 
 export type BotOptions = {
   path: string;
@@ -10,7 +14,10 @@ export type BotOptions = {
 
 export type BotFeature = {
   definitions: readonly CommandDefinition[];
-  make: (client: Client, options: BotOptions) => Effect.Effect<BotModule, Error, Scope.Scope>;
+  make: (
+    client: Client,
+    options: BotOptions,
+  ) => Effect.Effect<BotModule, Error, Scope.Scope | BackgroundHealth>;
 };
 
 export const featureStatePath = (path: string, feature: string) =>

@@ -19,7 +19,7 @@ import { OutstandingAssignments } from "../src/bot/assignments/OutstandingAssign
 import { readConfiguration } from "../src/config/Configuration";
 import { RoleService } from "../src/bot/RoleService";
 import { autoroleCommands } from "../src/bot/commands/AutoroleCommands";
-import { composeModules, install } from "@autorole/discord-framework";
+import { BackgroundHealth, composeModules, install } from "@autorole/discord-framework";
 
 const ids = {
   app: "100000000000000001",
@@ -283,6 +283,7 @@ test("command definitions serialize without constructing runtime dependencies", 
     "member-counter",
     "guidelines-renew",
     "guidelines-status",
+    "bot-status",
   ]);
   expect(
     commandDefinitions.find((definition) => definition.name === "autorole")?.toJSON(),
@@ -699,7 +700,7 @@ test("autorole module handles a join and removes its listeners on scope exit", a
           const modules = yield* Effect.forEach(
             autoroleModules({ path: ":memory:", report: () => Effect.void }),
             (make) => make(fixture.client),
-          );
+          ).pipe(Effect.provideService(BackgroundHealth, { snapshot: Effect.succeed([]) }));
           const module = composeModules(modules);
           expect(module.commands.definitions.map((definition) => definition.toJSON())).toEqual(
             commandDefinitions.map((definition) => definition.toJSON()),
@@ -712,6 +713,7 @@ test("autorole module handles a join and removes its listeners on scope exit", a
               "member-counter",
               "guidelines-renew",
               "guidelines-status",
+              "bot-status",
             ],
           );
           expect(

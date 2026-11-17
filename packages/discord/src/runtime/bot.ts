@@ -3,8 +3,9 @@ import { Deferred, Effect } from "effect";
 import { CommandRegistry } from "../commands/registry";
 import { runClient } from "./client";
 import { event, install, type EventHandler, type Report } from "./events";
-import { rotatePresence } from "./presence";
+import { presenceTask } from "./presence";
 import { runBackgroundTask, type BackgroundTask } from "./background";
+import { BackgroundHealth, makeBackgroundHealth } from "./health";
 
 export type BotModule = {
   commands: CommandRegistry;
@@ -14,7 +15,7 @@ export type BotModule = {
 
 export type BotModuleFactory = (
   client: Client,
-) => Effect.Effect<BotModule, Error, import("effect").Scope.Scope>;
+) => Effect.Effect<BotModule, Error, import("effect").Scope.Scope | BackgroundHealth>;
 
 /** Combine modules before installing listeners, rejecting conflicting commands. */
 export function composeModules(modules: readonly BotModule[]): BotModule {
@@ -43,6 +44,7 @@ export const runBot = Effect.fn("Discord.runBot")(function* (options: {
   presence?: { name: string; statuses: readonly [string, ...string[]]; interval: number };
 }) {
   const shutdown = yield* Deferred.make<void>();
+  const health = yield* makeBackgroundHealth();
   yield* runClient(
     options.client,
     options.token,
@@ -51,10 +53,18 @@ export const runBot = Effect.fn("Discord.runBot")(function* (options: {
         const scope = yield* Effect.scope;
         const modules: BotModule[] = [];
         for (const make of options.modules) modules.push(yield* make(client));
+        if (options.presence)
+          modules.push({
+            commands: new CommandRegistry([]),
+            events: [],
+            background: [presenceTask(options.presence)],
+          });
         const module = yield* Effect.try({
           try: () => composeModules(modules),
           catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
         });
+        const tasks = yield* health.register(module.background ?? []);
+        yield* Effect.addFinalizer(() => health.stop);
         yield* install(
           client,
           module.commands,
@@ -64,20 +74,13 @@ export const runBot = Effect.fn("Discord.runBot")(function* (options: {
               Events.ClientReady,
               (readyClient) =>
                 Effect.gen(function* () {
-                  for (const task of module.background ?? []) {
+                  for (const entry of tasks) {
                     yield* Effect.forkIn(scope, { startImmediately: true })(
-                      runBackgroundTask(task, readyClient, options.reportHandler),
-                    );
-                  }
-                  if (options.presence) {
-                    const presence = options.presence;
-                    yield* Effect.forkIn(scope, { startImmediately: true })(
-                      rotatePresence(
-                        readyClient,
-                        presence.name,
-                        presence.statuses,
-                        presence.interval,
-                      ),
+                      runBackgroundTask({
+                        ...entry,
+                        client: readyClient,
+                        report: options.reportHandler,
+                      }),
                     );
                   }
                   yield* options
@@ -99,7 +102,7 @@ export const runBot = Effect.fn("Discord.runBot")(function* (options: {
           ],
           options.reportHandler,
         );
-      }),
+      }).pipe(Effect.provideService(BackgroundHealth, health.service)),
     Deferred.await(shutdown),
   );
 });

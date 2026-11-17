@@ -151,10 +151,8 @@ test("command upserts use the selected scope and preserve unrelated commands", a
   }
 });
 
-test("presence rotates immediately and stops when interrupted", async () => {
-  const { rotatePresence } = await import("@autorole/discord-framework");
-  const { TestClock } = await import("effect/testing");
-  const { Fiber } = await import("effect");
+test("presence passes rotate through statuses and wrap around", async () => {
+  const { presenceTask } = await import("@autorole/discord-framework");
   const states: string[] = [];
   const client = {
     user: {
@@ -164,20 +162,17 @@ test("presence rotates immediately and stops when interrupted", async () => {
       },
     },
   } as unknown as Client<true>;
+  const task = presenceTask({ name: "Game", statuses: ["first", "second"], interval: 60_000 });
   await Effect.runPromise(
-    Effect.gen(function* () {
-      const fiber = yield* Effect.forkChild(
-        rotatePresence(client, "Game", ["first", "second"], 60_000),
-        { startImmediately: true },
-      );
-      expect(states).toEqual(["first"]);
-      yield* TestClock.adjust(60_000);
-      expect(states).toEqual(["first", "second"]);
-      yield* Fiber.interrupt(fiber);
-      yield* TestClock.adjust(60_000);
-      expect(states).toEqual(["first", "second"]);
-    }).pipe(Effect.provide(TestClock.layer())),
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* task.run(client);
+        yield* task.run(client);
+        yield* task.run(client);
+      }),
+    ),
   );
+  expect(states).toEqual(["first", "second", "first"]);
 });
 
 test("command registry dispatches, rejects duplicate names, and ignores unknown commands", async () => {

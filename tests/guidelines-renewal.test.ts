@@ -5,9 +5,10 @@ import {
   PermissionFlagsBits as P,
   PermissionsBitField,
   type Guild,
+  type Client,
   type ButtonInteraction,
 } from "discord.js";
-import { Effect, Fiber } from "effect";
+import { Effect, Fiber, Result } from "effect";
 import { GuidelinesCoordinator } from "../src/bot/guidelines/GuidelinesCoordinator";
 import { agreementButton } from "../src/bot/guidelines/AgreementPanel";
 import { AgreementStore } from "../src/bot/guidelines/AgreementStore";
@@ -118,6 +119,31 @@ function fixture() {
   };
   return { guild, edits, message, period, member, held };
 }
+
+test("periodic guidelines health reports incomplete updates and recovers on a later pass", async () => {
+  const { guild, member, held } = fixture();
+  const client = {
+    guilds: { cache: new Collection([[rosterGuildId, guild]]) },
+  } as unknown as Client;
+  member.roles.add = async () => {
+    throw new Error("Unavailable");
+  };
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* AgreementStore.make(":memory:");
+        const guidelines = new GuidelinesCoordinator(store);
+        const failed = yield* Effect.result(guidelines.refresh(client));
+        expect(Result.isFailure(failed)).toBe(true);
+        member.roles.add = async (id) => {
+          held.add(id);
+        };
+        yield* guidelines.refresh(client);
+        expect(held.has("access-0")).toBe(true);
+      }),
+    ),
+  );
+});
 
 test("concurrent renewals keep the installed button and active period in the same order", async () => {
   const { guild, edits, message, period } = fixture();
